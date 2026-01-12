@@ -1,0 +1,2346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Domu - Tactics V4 (Deck & Matchmaking)</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --p1-color: #3b82f6;
+            --p2-color: #ef4444;
+            --summon-color: #a855f7;
+            --accent: #f59e0b;
+            --text-main: #e0e0e0;
+            --locked-color: #374151;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- UI Components --- */
+        .screen { display: none; height: 100%; width: 100%; }
+        .active-screen { display: flex; flex-direction: column; }
+
+        h1, h2, h3 { margin: 0.5em 0; text-align: center; }
+
+        /* --- DAMAGE LOG STYLES --- */
+        .dmg-normal { color: #e0e0e0; font-weight: bold; }
+        .dmg-pierce { color: #38bdf8; font-style: italic; font-weight: bold; text-shadow: 0 0 5px rgba(56, 189, 248, 0.5); }
+        
+        .dmg-perfect {
+            color: #ffd700;
+            font-weight: 900;
+            text-transform: uppercase;
+            text-shadow: 0 0 5px #ffd700, 0 0 10px #f59e0b;
+            animation: perfect-glow 1.5s infinite alternate;
+            display: inline-block;
+        }
+        @keyframes perfect-glow {
+            0% { text-shadow: 0 0 5px #ffd700; transform: scale(1); }
+            100% { text-shadow: 0 0 15px #f59e0b, 0 0 25px #ef4444; transform: scale(1.1); }
+        }
+
+        /* --- ACTION TOAST POPUP --- */
+        #action-toast {
+            position: fixed;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            color: var(--accent);
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border: 2px solid var(--accent);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 5000;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+        }
+        #action-toast.show { opacity: 1; transform: translateX(-50%) scale(1.1); }
+
+        /* --- AUTH SCREEN --- */
+        #auth-screen {
+            justify-content: center;
+            align-items: center;
+            background: #0f0f13;
+        }
+        .auth-box {
+            background: #1f2937;
+            padding: 30px;
+            border-radius: 12px;
+            width: 320px;
+            text-align: center;
+            border: 1px solid #374151;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        .auth-input {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            background: #111827;
+            border: 1px solid #374151;
+            color: white;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+        .auth-options {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            margin: 10px 0;
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+        .auth-options input { margin-right: 8px; }
+        .auth-btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 10px;
+            background: var(--p1-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+        .auth-btn:hover { background: #2563eb; }
+        .auth-switch {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #9ca3af;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .auth-switch:hover { color: var(--accent); }
+
+        /* --- LOBBY SCREEN --- */
+        #lobby-screen {
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            text-align: center;
+            position: relative;
+        }
+        
+        #user-profile-bar {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #1f2937;
+            padding: 10px 20px;
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border: 1px solid #374151;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .coin-display { color: var(--accent); font-weight: bold; display: flex; align-items: center; gap: 5px; }
+        .logout-btn {
+            background: #7f1d1d;
+            color: #fca5a5;
+            border: 1px solid #991b1b;
+            padding: 5px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        .logout-btn:hover { background: #ef4444; color: white; }
+
+        .lobby-btn {
+            background: #2563eb;
+            color: white;
+            font-size: 1.2rem;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 250px;
+            transition: transform 0.2s;
+            opacity: 0.6; /* Disabled initially */
+            pointer-events: none;
+        }
+        .lobby-btn.ready { opacity: 1; pointer-events: auto; }
+        .lobby-btn:hover { transform: scale(1.05); background: #1d4ed8; }
+        .lobby-btn.secondary { background: #4b5563; }
+        .lobby-btn.special { background: linear-gradient(45deg, #7c3aed, #db2777); border: 1px solid #f0abfc; box-shadow: 0 0 15px rgba(219, 39, 119, 0.3); }
+        .lobby-btn.matchmaking { background: linear-gradient(45deg, #059669, #10b981); box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
+
+        .lobby-input {
+            padding: 10px;
+            font-size: 1rem;
+            border-radius: 4px;
+            border: 1px solid #444;
+            background: #222;
+            color: white;
+            width: 230px;
+            margin-bottom: 10px;
+        }
+        .mode-select {
+            padding: 10px;
+            background: #1f2937;
+            color: white;
+            border: 1px solid #374151;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            width: 250px;
+            font-size: 1rem;
+        }
+
+        #room-code-display {
+            font-family: monospace;
+            background: #111;
+            padding: 10px;
+            border: 1px dashed var(--accent);
+            color: var(--accent);
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+        
+        #cancel-search-btn {
+            background: #7f1d1d;
+            color: #fca5a5;
+            border: 1px solid #991b1b;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+            display: none;
+        }
+        #cancel-search-btn:hover { background: #ef4444; color: white; }
+
+        /* --- COLLECTION SCREEN --- */
+        #collection-screen { padding: 20px; align-items: center; overflow-y: auto; }
+        .col-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 15px;
+            width: 90%;
+            max-width: 1000px;
+            margin-bottom: 50px;
+        }
+        .col-card {
+            background: var(--card-bg);
+            border: 1px solid #444;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            transition: all 0.2s;
+        }
+        .col-card.locked {
+            background: var(--locked-color);
+            opacity: 0.8;
+            border-style: dashed;
+        }
+        .col-card:hover { transform: translateY(-3px); }
+        .buy-btn {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: auto;
+        }
+        .buy-btn:hover { background: #fff; }
+        .owned-tag {
+            color: #10b981;
+            font-weight: bold;
+            font-size: 0.9rem;
+            margin-top: auto;
+        }
+
+        /* --- GAME OVER SCREEN --- */
+        #game-over-screen {
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.95);
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 3000;
+        }
+        #winner-text {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            text-shadow: 0 0 20px currentColor;
+        }
+        .rematch-btn {
+            background: var(--accent);
+            color: #000;
+            font-size: 1.5rem;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 0 15px var(--accent);
+            transition: all 0.3s;
+        }
+        .rematch-btn:hover {
+            transform: scale(1.1);
+            background: #fff;
+        }
+
+        /* --- CHAT WIDGET --- */
+        #chat-widget {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 4000;
+            display: none; /* Hidden until authenticated */
+            flex-direction: column;
+            align-items: flex-end;
+        }
+        
+        #chat-toggle-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--p1-color);
+            color: white;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            transition: transform 0.2s;
+            position: relative;
+        }
+        #chat-toggle-btn:hover { transform: scale(1.1); }
+        
+        #chat-notification {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 12px;
+            height: 12px;
+            background: #ef4444;
+            border-radius: 50%;
+            border: 2px solid #121212;
+            display: none;
+        }
+
+        #chat-box {
+            background: #1f2937;
+            width: 300px;
+            height: 400px;
+            border-radius: 12px;
+            border: 1px solid #374151;
+            margin-bottom: 15px;
+            display: none;
+            flex-direction: column;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+        #chat-box.open { display: flex; }
+
+        .chat-header {
+            background: #111827;
+            padding: 10px 15px;
+            font-weight: bold;
+            border-bottom: 1px solid #374151;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chat-close { cursor: pointer; color: #9ca3af; }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .chat-msg {
+            padding: 6px 10px;
+            border-radius: 8px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .chat-msg.mine {
+            align-self: flex-end;
+            background: #3b82f6;
+            color: white;
+        }
+        .chat-msg.theirs {
+            align-self: flex-start;
+            background: #374151;
+            color: #e5e7eb;
+        }
+        .chat-sender {
+            font-size: 0.7rem;
+            margin-bottom: 2px;
+            opacity: 0.8;
+        }
+
+        .chat-input-area {
+            padding: 10px;
+            background: #111827;
+            border-top: 1px solid #374151;
+            display: flex;
+            gap: 5px;
+        }
+        #chat-input {
+            flex: 1;
+            background: #374151;
+            border: 1px solid #4b5563;
+            border-radius: 20px;
+            padding: 8px 12px;
+            color: white;
+            outline: none;
+        }
+        #chat-send {
+            background: transparent;
+            border: none;
+            color: var(--p1-color);
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* --- Selection Screen --- */
+        #select-screen { padding: 20px; align-items: center; overflow-y: auto; }
+        #char-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            width: 90%;
+            max-width: 1000px;
+            margin-bottom: 50px;
+        }
+        
+        .char-select-card {
+            background: var(--card-bg);
+            border: 1px solid #444;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+            text-align: center;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .char-select-card:hover { border-color: var(--accent); background: #2a2a2a; }
+        .char-select-card.selected { border: 2px solid var(--p1-color); background: #1e2a3a; }
+        .char-select-card.selected-p2 { border: 2px solid var(--p2-color); background: #3a1e1e; }
+        .char-select-card.taken { opacity: 0.5; cursor: not-allowed; filter: grayscale(0.5); }
+
+        .info-btn {
+            background: #4b5563;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: auto; /* Push to bottom */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        .info-btn:hover { background: #6b7280; }
+
+        /* --- Info Modal --- */
+        #info-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        .modal-content {
+            background: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 12px;
+            padding: 20px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        .close-modal {
+            position: absolute;
+            top: 15px; right: 15px;
+            background: none; border: none;
+            color: #aaa; font-size: 1.5rem;
+            cursor: pointer;
+        }
+        .skill-list-item {
+            background: #111827;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 3px solid var(--accent);
+        }
+        .skill-list-item.passive {
+            border-left: 3px solid #10b981;
+        }
+        .skill-name { font-weight: bold; color: #fff; display: block; margin-bottom: 2px; }
+        .skill-desc { font-size: 0.85rem; color: #ccc; }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+            background: #111;
+            padding: 10px;
+            border-radius: 6px;
+        }
+        
+        .summon-btn-info {
+            background: #581c87;
+            color: #e9d5ff;
+            border: 1px solid #6b21a8;
+            padding: 8px;
+            width: 100%;
+            margin-top: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .summon-btn-info:hover { background: #6b21a8; }
+
+        /* --- Battle Screen --- */
+        #battle-screen { flex-direction: column; }
+        
+        #top-bar {
+            background: #000;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            gap: 10px;
+        }
+
+        #timer-display {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: white;
+            background: #333;
+            padding: 5px 15px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            min-width: 30px;
+            text-align: center;
+        }
+        #timer-display.warning { 
+            color: #ef4444; 
+            border-color: #ef4444; 
+            animation: pulse 1s infinite; 
+        }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        #log-box {
+            height: 150px;
+            background: #0a0a0a;
+            overflow-y: auto;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            border-bottom: 1px solid #333;
+        }
+        .log-p1 { color: #93c5fd; }
+        .log-p2 { color: #fca5a5; }
+        .log-sys { color: #fbbf24; }
+
+        #board {
+            flex: 1;
+            display: flex;
+            background: #181818;
+            padding: 10px;
+            gap: 10px;
+            overflow-x: auto;
+        }
+
+        .side {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            overflow-y: auto;
+        }
+        .side-p1 { border: 1px dashed #333; }
+        .side-p2 { border: 1px dashed #333; }
+        
+        /* --- Battle Card --- */
+        .b-card {
+            background: #252525;
+            border: 2px solid #444;
+            border-radius: 6px;
+            padding: 10px;
+            position: relative;
+            min-height: 180px;
+            display: flex;
+            flex-direction: column;
+            width: 250px;
+            flex-shrink: 0;
+            transition: border-color 0.2s;
+        }
+        
+        .b-card.active-turn { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.2); }
+        .b-card.p1 { border-left: 5px solid var(--p1-color); }
+        .b-card.p2 { border-left: 5px solid var(--p2-color); }
+        
+        /* Summon Differentiation */
+        .b-card.summon { 
+            border: 1px solid var(--summon-color);
+            background: #221e26;
+        }
+        .b-card.summon.p1 { border-left: 5px solid var(--p1-color); }
+        .b-card.summon.p2 { border-left: 5px solid var(--p1-color); }
+        
+        .b-card.dead { filter: grayscale(1) brightness(0.5); pointer-events: none; }
+        
+        .stat-row { display: flex; justify-content: space-between; font-size: 0.8rem; color: #aaa; margin-top: 5px; }
+        
+        /* Bars */
+        .bar-wrap { height: 10px; background: #444; margin-top: 4px; border-radius: 4px; overflow: hidden; position: relative;}
+        .bar-fill { height: 100%; transition: width 0.3s; }
+        .hp-bar { background: #22c55e; }
+        .mana-bar { background: #3b82f6; }
+        .armor-bar { background: #eab308; }
+        .particle-bar { background: #f472b6; }
+        .bullet-bar { background: #818cf8; }
+        
+        .bar-text {
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            font-size: 8px; color: #fff; text-align: center; line-height: 10px; text-shadow: 1px 1px 1px #000;
+        }
+
+        .skills-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        /* Passive Box (Active Effects) */
+        .effects-box {
+            margin-top: 5px;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 4px;
+            font-size: 0.7rem;
+            min-height: 1.2em;
+            color: #ccc;
+            white-space: pre-wrap;
+        }
+        
+        /* Inherent Passives Text on Card */
+        .inherent-passives {
+            font-size: 0.7rem;
+            color: #9ca3af;
+            font-style: italic;
+            margin-bottom: 4px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .passive-info-icon {
+            display: inline-block;
+            width: 16px; height: 16px;
+            background: #6366f1;
+            color: #fff;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 16px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 6px;
+            cursor: pointer;
+            border: 1px solid #818cf8;
+            vertical-align: middle;
+            transition: all 0.2s;
+        }
+        .passive-info-icon:hover {
+            background: var(--accent);
+            border-color: #fff;
+            transform: scale(1.1);
+        }
+
+        .passive-tag {
+            display: inline-block;
+            background: #333;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-right: 2px;
+            margin-bottom: 2px;
+            font-size: 0.65rem;
+            border: 1px solid transparent;
+        }
+        .passive-tag.bad { background: #7f1d1d; color: #fca5a5; border-color: #991b1b; }
+        .passive-tag.good { background: #064e3b; color: #6ee7b7; border-color: #065f46; }
+        .passive-tag.special { background: #581c87; color: #e9d5ff; border-color: #6b21a8; }
+
+        /* Animation Shine */
+        @keyframes shine {
+            0% { box-shadow: 0 0 5px rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.3); }
+            50% { box-shadow: 0 0 15px rgba(255,215,0, 0.6); border-color: rgba(255,215,0, 0.8); transform: scale(1.02); }
+            100% { box-shadow: 0 0 5px rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.3); }
+        }
+
+        .shine-active {
+            animation: shine 1.5s infinite ease-in-out;
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Buttons */
+        .skill-btn-wrapper { position: relative; display: inline-block; width: 100%;}
+
+        button.card-action-btn {
+            border: 1px solid #444; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+            color: white; background: #4b5563; width: 100%; text-align: left;
+            margin-bottom: 2px;
+            transition: all 0.2s;
+        }
+        button.card-action-btn:hover { background: #6b7280; border-color: #999; }
+        button.card-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .btn-act { background: #8b5cf6; border-color: #7c3aed; }
+        .btn-atk { background: #ef4444; border-color: #dc2626; }
+        .btn-pass { background: #10b981; border-color: #059669; width: 100%;}
+
+        /* NEW GLOBAL TOOLTIP */
+        #ui-tooltip {
+            position: fixed;
+            background: rgba(10, 10, 15, 0.95);
+            border: 1px solid #7c3aed;
+            color: #fff;
+            padding: 10px;
+            border-radius: 6px;
+            pointer-events: none;
+            z-index: 9999;
+            font-size: 0.85rem;
+            max-width: 250px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.8);
+            display: none;
+            backdrop-filter: blur(4px);
+            white-space: normal;
+            line-height: 1.4;
+        }
+
+        .targeting .b-card:hover { border-color: red; cursor: crosshair; }
+        .targeting .b-card.friendly:hover { border-color: green; }
+
+    </style>
+</head>
+<body>
+
+<!-- SOUND SYSTEM (Invisible) -->
+<div id="sound-manager"></div>
+
+<!-- GLOBAL TOOLTIP CONTAINER -->
+<div id="ui-tooltip"></div>
+
+<!-- ACTION TOAST -->
+<div id="action-toast"></div>
+
+<!-- INFO MODAL -->
+<div id="info-modal" onclick="closeModal(event)">
+    <div class="modal-content">
+        <button class="close-modal" onclick="closeModal(event)">&times;</button>
+        <h2 id="modal-title" style="color: var(--accent); margin-bottom: 5px;">Character Name</h2>
+        <div style="text-align:center; color: #777; margin-bottom: 15px;" id="modal-role">Role</div>
+        <div class="stat-grid" id="modal-stats"></div>
+        <h3 style="text-align:left; border-bottom: 1px solid #444; padding-bottom: 5px; margin-top: 20px;">Skills & Passives</h3>
+        <div id="modal-skills"></div>
+        <div id="modal-summons-area"></div>
+    </div>
+</div>
+
+<!-- GAME OVER SCREEN -->
+<div id="game-over-screen" class="screen">
+    <div id="winner-text" style="color: #fff;">VICTORY</div>
+    <div style="color: var(--accent); font-size: 1.5rem; margin-bottom: 20px;" id="coin-reward-display"></div>
+    <button class="rematch-btn" onclick="triggerRematch()">REMATCH</button>
+    <button class="rematch-btn" style="background:#4b5563; margin-top:10px; font-size:1rem;" onclick="cancelMatchmaking()">Return to Lobby</button>
+</div>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen" class="active-screen screen">
+    <h1 style="color: var(--accent); font-size: 3rem; margin-bottom: 10px;">DOMU TACTICS</h1>
+    <h3 style="color: #666; font-size: 1.2rem;">V4: Deck & Matchmaking</h3>
+    <div class="auth-box">
+        <h2 id="auth-title" style="color: white; margin-bottom: 20px;">Login</h2>
+        <input type="email" id="auth-email" class="auth-input" placeholder="Email">
+        <input type="password" id="auth-password" class="auth-input" placeholder="Password">
+        
+        <!-- Username only for Register -->
+        <input type="text" id="auth-username" class="auth-input" placeholder="Display Name (Username)" style="display:none; border-color: var(--accent);">
+        
+        <div class="auth-options">
+            <input type="checkbox" id="auth-remember" checked>
+            <label for="auth-remember">Stay Logged In</label>
+        </div>
+
+        <button class="auth-btn" id="auth-action-btn" onclick="handleAuth()">Login</button>
+        <div class="auth-switch" onclick="toggleAuthMode()" id="auth-switch-text">Need an account? Register</div>
+        <div id="auth-error" style="color: #ef4444; margin-top: 10px; font-size: 0.85rem; line-height:1.2;"></div>
+    </div>
+</div>
+
+<!-- CHAT WIDGET -->
+<div id="chat-widget">
+    <div id="chat-box">
+        <div class="chat-header">
+            <span>Room Chat</span>
+            <span class="chat-close" onclick="toggleChat()">✖</span>
+        </div>
+        <div class="chat-messages" id="chat-msg-area"></div>
+        <div class="chat-input-area">
+            <input type="text" id="chat-input" placeholder="Message..." onkeypress="handleChatKey(event)">
+            <button id="chat-send" onclick="sendChatMessage()">➤</button>
+        </div>
+    </div>
+    <button id="chat-toggle-btn" onclick="toggleChat()">
+        💬
+        <div id="chat-notification"></div>
+    </button>
+</div>
+
+<!-- LOBBY SCREEN -->
+<div id="lobby-screen" class="screen">
+    <div id="user-profile-bar">
+        <span id="lobby-username" style="color: white; font-weight: bold;">Player</span>
+        <span class="coin-display"><span style="font-size:1.2rem;">🪙</span> <span id="lobby-coins">0</span></span>
+        <button class="logout-btn" onclick="handleLogout()">Logout</button>
+    </div>
+
+    <h1 style="color: var(--accent); font-size: 3rem;">LOBBY</h1>
+    
+    <div style="display:flex; flex-direction:column; gap:10px; align-items:center;">
+        <button class="lobby-btn special" onclick="goToScreen('collection-screen'); initCollection();">Cards & Deck (Shop)</button>
+        
+        <div style="width:250px; border-top:1px solid #333; margin:10px 0;"></div>
+
+        <button class="lobby-btn matchmaking" id="btn-matchmake" onclick="startMatchmaking()">Find Quick Match</button>
+        
+        <div style="width:250px; border-top:1px solid #333; margin:10px 0;"></div>
+
+        <select id="mode-select" class="mode-select">
+            <option value="2">Normal (2v2 Cards)</option>
+            <option value="1">Duel (1v1 Cards)</option>
+            <option value="3">War (3v3 Cards)</option>
+        </select>
+        
+        <button class="lobby-btn secondary" id="btn-offline" onclick="startOffline()" data-original-text="Play Offline (Hotseat)">Offline Practice</button>
+        <button class="lobby-btn" id="btn-host" onclick="startHost()" data-original-text="Create Online Room">Create Room</button>
+        
+        <div style="margin-top: 20px;">
+            <input type="text" id="join-code-input" class="lobby-input" placeholder="Enter Room ID">
+            <br>
+            <button class="lobby-btn" id="btn-join" style="width: 250px; background: #7c3aed;" onclick="startJoin()" data-original-text="Join Room">Join Room</button>
+        </div>
+    </div>
+    
+    <div id="lobby-status" style="height: 30px; color: var(--accent); margin-top: 10px;"></div>
+    <div id="room-code-display" style="display:none;" onclick="copyRoomCode()"></div>
+    <button id="cancel-search-btn" onclick="cancelMatchmaking()">Cancel / Leave Room</button>
+</div>
+
+<!-- COLLECTION SCREEN -->
+<div id="collection-screen" class="screen">
+    <div style="display:flex; justify-content:space-between; align-items:center; width:90%; max-width:1000px; margin-bottom:20px;">
+        <button class="logout-btn" style="background:#4b5563; border-color:#6b7280; color:white;" onclick="goToScreen('lobby-screen')">Back to Lobby</button>
+        <div class="coin-display" style="font-size:1.5rem;"><span style="font-size:1.8rem;">🪙</span> <span id="collection-coins">0</span></div>
+    </div>
+    <h1>Card Collection & Shop</h1>
+    <p style="color:#aaa;">Unlocking a card allows you to use it in all game modes.</p>
+    <div id="collection-grid" class="col-grid"></div>
+</div>
+
+<!-- SELECTION SCREEN -->
+<div id="select-screen" class="screen">
+    <div style="display:flex; justify-content:space-between; width:90%; max-width:1000px; margin-bottom:10px;">
+        <h1>Select Your Team</h1>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <button class="logout-btn" style="background:#7f1d1d; border:none;" onclick="cancelMatchmaking()">Leave Lobby</button>
+            <div id="select-timer" style="color:var(--accent); font-weight:bold; font-size:1.5rem;"></div>
+        </div>
+    </div>
+    <h2 id="select-instruction" style="color: var(--p1-color)">Player 1: Select Cards</h2>
+    <div id="char-grid"></div>
+</div>
+
+<!-- BATTLE SCREEN -->
+<div id="battle-screen" class="screen">
+    <div id="top-bar">
+        <span id="turn-indicator">Round 1</span>
+        <div id="timer-display">120</div>
+        <div style="flex: 1;"></div>
+        <button style="width: auto; background:#7f1d1d; color:#fca5a5; border:1px solid #991b1b; cursor:pointer;" onclick="cancelMatchmaking()">Exit to Lobby</button>
+    </div>
+    <div id="log-box"></div>
+    <div id="board">
+        <div id="p1-side" class="side side-p1"></div>
+        <div id="p2-side" class="side side-p2"></div>
+    </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, increment, arrayUnion, query, collection, where, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCyJ4RsMHBW2N8qgCMydwbDeJPhKPICGqU",
+  authDomain: "testdomutacticsmultiplayer.firebaseapp.com",
+  projectId: "testdomutacticsmultiplayer",
+  storageBucket: "testdomutacticsmultiplayer.firebasestorage.app",
+  messagingSenderId: "528731755694",
+  appId: "1:528731755694:web:6b7341fd5b9fa3f05bc93f"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// --- 0. DATA & CONFIG ---
+const PREMIUM_COST = 250;
+const PREMIUM_CARDS = ['Zephyr', 'Aidan', 'Mina', 'Ramiel', 'Kotone Akiba', 'Death Sniper', 'Kid Yizama Kamaru'];
+const DEFAULT_OWNED = ['Knight', 'Archer', 'Magician', 'Rogue', 'Priest', 'Bard', 'Sorcerer', 'Druid', 'Cleric', 'Artificer'];
+
+// --- 1. AUTH & USER SYSTEM ---
+window.currentUserProfile = null;
+let isRegistering = false;
+
+window.toggleAuthMode = function() {
+    isRegistering = !isRegistering;
+    const title = document.getElementById('auth-title');
+    const btn = document.getElementById('auth-action-btn');
+    const switchText = document.getElementById('auth-switch-text');
+    const usernameInput = document.getElementById('auth-username');
+    const err = document.getElementById('auth-error');
+    err.innerText = "";
+
+    if (isRegistering) {
+        title.innerText = "Register";
+        btn.innerText = "Create Account & Login";
+        switchText.innerText = "Have an account? Login";
+        usernameInput.style.display = "block";
+    } else {
+        title.innerText = "Login";
+        btn.innerText = "Login";
+        switchText.innerText = "Need an account? Register";
+        usernameInput.style.display = "none";
+    }
+}
+
+window.handleAuth = async function() {
+    const email = document.getElementById('auth-email').value;
+    const password = document.getElementById('auth-password').value;
+    const username = document.getElementById('auth-username').value;
+    const isRemember = document.getElementById('auth-remember').checked;
+    const errBox = document.getElementById('auth-error');
+    
+    if(!email || !password) { errBox.innerText = "Email and Password required."; return; }
+    errBox.innerText = "Processing...";
+
+    try {
+        await setPersistence(auth, isRemember ? browserLocalPersistence : browserSessionPersistence);
+        if (isRegistering) {
+            if(!username) throw new Error("Username required for registration.");
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            // Create Profile with default owned cards
+            await setDoc(doc(db, "users", userCredential.user.uid), {
+                username: username,
+                coins: 200, // Starter coins
+                ownedCards: DEFAULT_OWNED,
+                createdAt: Date.now()
+            });
+        } else {
+            await signInWithEmailAndPassword(auth, email, password);
+        }
+    } catch (error) {
+        console.error(error);
+        errBox.innerText = error.message;
+    }
+}
+
+window.handleLogout = function() {
+    signOut(auth).then(() => {
+        window.currentUserProfile = null;
+        window.location.reload();
+    });
+}
+
+// Auth State Listener
+onAuthStateChanged(auth, async (user) => {
+    if (user) {
+        try {
+            const docRef = doc(db, "users", user.uid);
+            const docSnap = await getDoc(docRef);
+            
+            if (docSnap.exists()) {
+                window.currentUserProfile = { uid: user.uid, ...docSnap.data() };
+                // Ensure ownedCards exists (migration for old accounts)
+                if (!window.currentUserProfile.ownedCards) {
+                    window.currentUserProfile.ownedCards = DEFAULT_OWNED;
+                    await updateDoc(docRef, { ownedCards: DEFAULT_OWNED });
+                }
+                updateLobbyUI();
+                goToScreen('lobby-screen');
+                document.getElementById('chat-widget').style.display = 'flex';
+                
+                onSnapshot(docRef, (doc) => {
+                     if(doc.exists()) {
+                         const d = doc.data();
+                         window.currentUserProfile.coins = d.coins;
+                         window.currentUserProfile.ownedCards = d.ownedCards || DEFAULT_OWNED;
+                         updateLobbyUI();
+                         if(document.getElementById('collection-screen').style.display !== 'none') initCollection();
+                     }
+                });
+            } else {
+                await setDoc(doc(db, "users", user.uid), { username: "Player-" + user.uid.substr(0,4), coins: 200, ownedCards: DEFAULT_OWNED });
+                window.location.reload();
+            }
+        } catch(e) { console.error("Profile load error", e); }
+    } else {
+        goToScreen('auth-screen');
+        document.getElementById('chat-widget').style.display = 'none';
+    }
+});
+
+function updateLobbyUI() {
+    if(!window.currentUserProfile) return;
+    document.getElementById('lobby-username').innerText = window.currentUserProfile.username;
+    document.getElementById('lobby-coins').innerText = window.currentUserProfile.coins;
+    document.querySelectorAll('.lobby-btn').forEach(btn => btn.classList.add('ready'));
+}
+
+// --- CHAT SYSTEM ---
+let chatOpen = false;
+let lastMsgCount = 0;
+
+window.toggleChat = function() {
+    chatOpen = !chatOpen;
+    const box = document.getElementById('chat-box');
+    const notif = document.getElementById('chat-notification');
+    if (chatOpen) { box.classList.add('open'); notif.style.display = 'none'; scrollToBottom(); } 
+    else { box.classList.remove('open'); }
+}
+
+window.handleChatKey = function(e) { if (e.key === 'Enter') window.sendChatMessage(); }
+
+window.sendChatMessage = async function() {
+    if (!window.isMultiplayer || !dbRoomRef) {
+        const txt = document.getElementById('chat-input').value;
+        if(txt.trim()) renderChat([{ sender: "System", text: "Chat only works in online rooms.", ts: Date.now() }]);
+        document.getElementById('chat-input').value = "";
+        return;
+    }
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    try {
+        const msg = { sender: window.currentUserProfile.username, text: text, ts: Date.now() };
+        await updateDoc(dbRoomRef, { chat: arrayUnion(msg) });
+        input.value = "";
+    } catch(e) { console.error("Chat send error:", e); }
+}
+
+function renderChat(messages) {
+    if (!messages) return;
+    const area = document.getElementById('chat-msg-area');
+    area.innerHTML = '';
+    messages.sort((a,b) => a.ts - b.ts);
+    messages.forEach(m => {
+        const div = document.createElement('div');
+        const isMe = m.sender === window.currentUserProfile.username;
+        div.className = `chat-msg ${isMe ? 'mine' : 'theirs'}`;
+        div.innerHTML = `<div class="chat-sender">${m.sender}</div>${m.text}`;
+        area.appendChild(div);
+    });
+    if (!chatOpen && messages.length > lastMsgCount) { document.getElementById('chat-notification').style.display = 'block'; SoundManager.play('click'); }
+    lastMsgCount = messages.length;
+    if (chatOpen) scrollToBottom();
+}
+function scrollToBottom() { const area = document.getElementById('chat-msg-area'); area.scrollTop = area.scrollHeight; }
+
+// --- 2. COLLECTION & SHOP ---
+window.initCollection = function() {
+    const grid = document.getElementById('collection-grid');
+    grid.innerHTML = '';
+    document.getElementById('collection-coins').innerText = window.currentUserProfile.coins;
+
+    CHARACTERS.forEach(char => {
+        const isOwned = window.currentUserProfile.ownedCards.includes(char.name);
+        const el = document.createElement('div');
+        el.className = `col-card ${isOwned ? 'owned' : 'locked'}`;
+        
+        let actionHtml = '';
+        if(isOwned) {
+            actionHtml = `<div class="owned-tag">OWNED</div>`;
+        } else {
+            actionHtml = `
+                <div style="font-size:1.5rem; margin-bottom:5px;">🔒</div>
+                <div style="color:#eab308; margin-bottom:5px;">${PREMIUM_COST} Coins</div>
+                <button class="buy-btn" onclick="buyCard('${char.name}')">Unlock</button>
+            `;
+        }
+
+        el.innerHTML = `
+            <h3>${char.name}</h3>
+            <div style="font-size:0.8rem; color:#aaa;">${char.role}</div>
+            <div style="margin:10px 0;">HP: ${char.hp} | Spd: ${char.spd}</div>
+            ${actionHtml}
+            <button class="info-btn" style="width:100%; margin-top:5px;" onclick="openInfoModal(event, '${char.id}')">Info</button>
+        `;
+        grid.appendChild(el);
+    });
+}
+
+window.buyCard = async function(cardName) {
+    if(window.currentUserProfile.coins < PREMIUM_COST) return alert("Not enough coins!");
+    if(!confirm(`Buy ${cardName} for ${PREMIUM_COST} coins?`)) return;
+
+    try {
+        const userRef = doc(db, "users", window.currentUserProfile.uid);
+        await updateDoc(userRef, {
+            coins: increment(-PREMIUM_COST),
+            ownedCards: arrayUnion(cardName)
+        });
+        showToast(`Unlocked ${cardName}!`);
+    } catch(e) { console.error(e); alert("Error buying card"); }
+}
+
+// --- 3. UTILITIES & SOUND ---
+const SoundManager = {
+    audioCtx: null,
+    init: function() {
+        try { if (!this.audioCtx) this.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { console.warn("Audio not supported"); }
+    },
+    playTone: function(freq, type, duration, vol=0.1) {
+        try {
+            if (!this.audioCtx) this.init();
+            if (!this.audioCtx) return;
+            const osc = this.audioCtx.createOscillator();
+            const gain = this.audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.value = freq;
+            osc.connect(gain);
+            gain.connect(this.audioCtx.destination);
+            gain.gain.setValueAtTime(vol, this.audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + duration);
+            osc.start();
+            osc.stop(this.audioCtx.currentTime + duration);
+        } catch(e) {}
+    },
+    play: function(key) {
+        switch(key) {
+            case 'attack': this.playTone(150, 'sawtooth', 0.2); break;
+            case 'skill': this.playTone(400, 'sine', 0.4); break;
+            case 'turn': this.playTone(300, 'square', 0.1); break;
+            case 'click': this.playTone(600, 'triangle', 0.05); break;
+            case 'win': this.playTone(400, 'triangle', 0.2); setTimeout(()=>this.playTone(500, 'triangle', 0.2), 200); setTimeout(()=>this.playTone(600, 'triangle', 0.4), 400); break;
+            case 'lose': this.playTone(300, 'sawtooth', 0.3); setTimeout(()=>this.playTone(200, 'sawtooth', 0.3), 300); break;
+        }
+    }
+};
+
+const tooltipEl = document.getElementById('ui-tooltip');
+window.showTooltip = function(e, text) { 
+    if(!tooltipEl) return;
+    tooltipEl.style.display = 'block'; tooltipEl.innerHTML = text; window.moveTooltip(e); 
+}
+window.hideTooltip = function() { if(!tooltipEl) return; tooltipEl.style.display = 'none'; }
+window.moveTooltip = function(e) {
+    if(!tooltipEl) return;
+    const x = e.clientX; const y = e.clientY;
+    const rect = tooltipEl.getBoundingClientRect();
+    let finalX = x + 15; let finalY = y + 15;
+    if (finalX + rect.width > window.innerWidth) finalX = x - rect.width - 10;
+    if (finalY + rect.height > window.innerHeight) finalY = y - rect.height - 10;
+    tooltipEl.style.left = finalX + 'px'; tooltipEl.style.top = finalY + 'px';
+}
+document.addEventListener('mousemove', (e) => { if (tooltipEl && tooltipEl.style.display === 'block') window.moveTooltip(e); });
+
+window.showToast = function(text) {
+    const toast = document.getElementById('action-toast');
+    toast.innerText = text;
+    toast.classList.add('show');
+    if(window.toastTimeout) clearTimeout(window.toastTimeout);
+    window.toastTimeout = setTimeout(() => { toast.classList.remove('show'); }, 2500);
+}
+
+window.openInfoModal = function(e, charId) {
+    e.stopPropagation();
+    const char = CHARACTERS.find(c => c.id === charId);
+    if (!char) return;
+    document.getElementById('modal-title').innerText = char.name;
+    document.getElementById('modal-role').innerText = char.role;
+    let statsHTML = `
+        <div>❤️ HP: <span style="color:#22c55e">${char.hp}</span></div>
+        <div>🛡️ Def: <span style="color:#aaa">${char.def}</span></div>
+        <div>💧 Mana: <span style="color:#3b82f6">${char.mana || 'None'}</span></div>
+        <div>⚔️ Dmg: <span style="color:#ef4444">${char.dmg}</span></div>
+        <div>👟 Spd: <span style="color:#eab308">${char.spd}</span></div>
+    `;
+    document.getElementById('modal-stats').innerHTML = statsHTML;
+
+    let skillsHtml = '<div style="color:#3b82f6; font-size:0.9rem; margin-bottom:5px;">ACTIVE SKILLS</div>';
+    if(char.skills) {
+        char.skills.forEach(s => {
+            let costTxt = s.cost > 0 ? `Cost: ${s.cost}` : '';
+            skillsHtml += `<div class="skill-list-item"><span class="skill-name">${s.name} <small style="float:right; color:#3b82f6">${costTxt}</small></span><span class="skill-desc">${s.desc}</span></div>`;
+        });
+    }
+    if (char.passives && char.passives.length > 0) {
+        skillsHtml += '<div style="color:#10b981; font-size:0.9rem; margin:15px 0 5px 0;">PASSIVES</div>';
+        char.passives.forEach(p => {
+             skillsHtml += `<div class="skill-list-item passive"><span class="skill-name">${p.name}</span><span class="skill-desc">${p.desc}</span></div>`;
+        });
+    }
+    document.getElementById('modal-skills').innerHTML = skillsHtml;
+    
+    // NEW: Summon Info Buttons
+    const summonsArea = document.getElementById('modal-summons-area');
+    summonsArea.innerHTML = '';
+    if (char.summons && char.summons.length > 0) {
+        char.summons.forEach(summon => {
+            const btn = document.createElement('button');
+            btn.className = 'summon-btn-info';
+            btn.innerText = `View Summon: ${summon.name}`;
+            btn.onclick = (evt) => {
+                evt.stopPropagation();
+                // Switch modal content to summon
+                document.getElementById('modal-title').innerText = summon.name;
+                document.getElementById('modal-role').innerText = "Summon";
+                let sStats = `
+                    <div>❤️ HP: <span style="color:#22c55e">${summon.hp}</span></div>
+                    <div>🛡️ Def: <span style="color:#aaa">${summon.def || 0}</span></div>
+                    <div>⚔️ Dmg: <span style="color:#ef4444">${summon.dmg}</span></div>
+                    <div>👟 Spd: <span style="color:#eab308">${summon.spd}</span></div>
+                `;
+                document.getElementById('modal-stats').innerHTML = sStats;
+                
+                let sSkills = '';
+                if(summon.passives) {
+                    sSkills += '<div style="color:#10b981; font-size:0.9rem; margin:5px 0;">PASSIVES</div>';
+                    summon.passives.forEach(p => {
+                        sSkills += `<div class="skill-list-item passive"><span class="skill-name">${p.name}</span><span class="skill-desc">${p.desc}</span></div>`;
+                    });
+                }
+                document.getElementById('modal-skills').innerHTML = sSkills;
+                summonsArea.innerHTML = `<button class="summon-btn-info" onclick="openInfoModal(event, '${char.id}')">Back to ${char.name}</button>`;
+            };
+            summonsArea.appendChild(btn);
+        });
+    }
+    document.getElementById('info-modal').style.display = 'flex';
+}
+window.closeModal = function(e) {
+    if (e.target.id === 'info-modal' || e.target.classList.contains('close-modal')) {
+        document.getElementById('info-modal').style.display = 'none';
+    }
+}
+
+
+// --- 3. GAME MODES & MATCHMAKING ---
+let dbRoomRef = null;
+let unsubscribeRoom = null;
+let battleStartedLocal = false; 
+let heartbeatInterval = null;
+
+// MATCHMAKING LOGIC
+window.startMatchmaking = async function() {
+    if (!auth.currentUser) return;
+    const btn = document.getElementById('btn-matchmake');
+    const originalText = "Find Quick Match";
+    btn.innerText = "Searching...";
+    btn.disabled = true;
+    document.getElementById('cancel-search-btn').style.display = 'inline-block';
+
+    try {
+        const roomsRef = collection(db, "rooms");
+        // Get recent public rooms. 
+        const q = query(roomsRef, where("isPublic", "==", true), limit(20)); 
+        const snapshot = await getDocs(q);
+        
+        let targetRoomId = null;
+        const now = Date.now();
+        const cutoff = 2 * 60 * 1000; // 2 minutes staleness cutoff
+
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            // Criteria: No Joiner, Not My Room, AND Recently Updated (Active Host)
+            if (!data.joinerId && data.hostId !== auth.currentUser.uid) {
+                if (data.lastUpdate && (now - data.lastUpdate) < cutoff) {
+                    targetRoomId = doc.id;
+                }
+            }
+        });
+
+        if (targetRoomId) {
+            window.roomId = targetRoomId;
+            dbRoomRef = doc(db, 'rooms', window.roomId);
+            window.isMultiplayer = true;
+            window.myRole = 'p2';
+            window.gameState.playerNames.p2 = window.currentUserProfile.username;
+            window.gameState.p1Team = []; // Clear
+            window.gameState.p2Team = []; // Clear
+            document.getElementById('lobby-status').innerText = "Found room! Joining...";
+            subscribeToRoom();
+        } else {
+            // No valid room found, create one
+            await startHost(true);
+        }
+    } catch(e) {
+        console.error("Matchmaking error", e);
+        alert("Matchmaking failed: " + e.message);
+        btn.innerText = originalText;
+        btn.disabled = false;
+        document.getElementById('cancel-search-btn').style.display = 'none';
+    }
+}
+
+window.cancelMatchmaking = function() {
+    if (unsubscribeRoom) unsubscribeRoom();
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    
+    // Reset UI
+    window.isMultiplayer = false;
+    window.roomId = null;
+    dbRoomRef = null;
+    unsubscribeRoom = null;
+    window.battleStarting = false;
+    window.battleStartedLocal = false;
+    
+    // Reset Screens
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
+    document.getElementById('lobby-screen').classList.add('active-screen');
+    
+    document.getElementById('lobby-status').innerText = "";
+    document.getElementById('room-code-display').style.display = 'none';
+    document.getElementById('cancel-search-btn').style.display = 'none';
+    document.getElementById('btn-matchmake').innerText = "Find Quick Match";
+    document.getElementById('btn-matchmake').disabled = false;
+    
+    // Reset Game State basics
+    window.gameState.p1Team = [];
+    window.gameState.p2Team = [];
+    window.gameState.phase = 'waiting';
+}
+
+window.startOffline = function() {
+    window.isMultiplayer = false;
+    window.myRole = null;
+    window.gameState.playerNames = { p1: "Player 1", p2: "Player 2" };
+    // Clear any previous teams
+    window.gameState.p1Team = [];
+    window.gameState.p2Team = [];
+    window.gameState.phase = 'select'; // FORCE PHASE FOR OFFLINE
+    const mode = parseInt(document.getElementById('mode-select').value);
+    window.gameState.teamSize = mode;
+    goToScreen('select-screen');
+    initSelection();
+}
+
+window.startHost = async function(isPublic = false) {
+    if (!auth.currentUser) return alert("Connecting...");
+    window.isMultiplayer = true;
+    window.myRole = 'p1';
+    window.gameState.playerNames.p1 = window.currentUserProfile.username;
+    // Clear teams for new game
+    window.gameState.p1Team = [];
+    window.gameState.p2Team = [];
+    window.gameState.phase = 'waiting'; // Set initial state to WAITING
+    
+    const mode = parseInt(document.getElementById('mode-select').value);
+    window.gameState.teamSize = mode;
+
+    window.roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    dbRoomRef = doc(db, 'rooms', window.roomId);
+    
+    const initialData = { 
+        roomId: window.roomId, 
+        hostId: auth.currentUser.uid, 
+        joinerId: null, 
+        joinerName: null,
+        isPublic: isPublic,
+        teamSize: mode, 
+        gameState: getSafeGameState(), 
+        lastUpdate: Date.now() 
+    };
+    
+    try {
+        await setDoc(dbRoomRef, initialData);
+        document.getElementById('cancel-search-btn').style.display = 'inline-block';
+        
+        if(!isPublic) {
+            document.getElementById('lobby-status').innerText = "Waiting for player...";
+            const codeDisplay = document.getElementById('room-code-display');
+            codeDisplay.style.display = 'block';
+            codeDisplay.innerText = window.roomId;
+        } else {
+            document.getElementById('lobby-status').innerText = "Matchmaking: Waiting for opponent...";
+        }
+        
+        // Start Heartbeat to keep room "fresh"
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        heartbeatInterval = setInterval(async () => {
+            if (dbRoomRef && window.gameState.phase === 'waiting' && !window.battleStarting) {
+                 try { await updateDoc(dbRoomRef, { lastUpdate: Date.now() }); } catch(e) {}
+            } else {
+                 clearInterval(heartbeatInterval);
+            }
+        }, 15000); // Every 15s
+
+        subscribeToRoom();
+    } catch (e) { console.error(e); alert("Error: " + e.message); }
+}
+
+window.startJoin = async function() {
+    if (!auth.currentUser) return alert("Connecting...");
+    const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+    if (!code) return alert("Enter room code");
+    window.isMultiplayer = true;
+    window.myRole = 'p2';
+    window.gameState.playerNames.p2 = window.currentUserProfile.username;
+    window.gameState.p1Team = []; // Clear
+    window.gameState.p2Team = []; // Clear
+    window.roomId = code;
+    dbRoomRef = doc(db, 'rooms', window.roomId);
+    document.getElementById('cancel-search-btn').style.display = 'inline-block';
+    document.getElementById('lobby-status').innerText = "Joining...";
+    subscribeToRoom();
+}
+
+function subscribeToRoom() {
+    unsubscribeRoom = onSnapshot(dbRoomRef, (snap) => {
+        if (!snap.exists()) { if (window.myRole === 'p2') alert("Room not found!"); return; }
+        const data = snap.data();
+        
+        if (window.myRole === 'p2' && !data.joinerId) { 
+            setDoc(dbRoomRef, { 
+                joinerId: auth.currentUser.uid,
+                joinerName: window.currentUserProfile.username
+            }, { merge: true }).catch(console.error); 
+        }
+
+        if (data.teamSize) window.gameState.teamSize = data.teamSize;
+
+        // HOST DETECTS JOINER -> TRANSITION TO SELECT
+        if (window.myRole === 'p1' && data.joinerName && window.gameState.phase === 'waiting') {
+             window.gameState.playerNames.p2 = data.joinerName;
+             window.gameState.phase = 'select'; // Host moves game to select phase
+             updateRemoteState(); // Sync this change
+             if(document.getElementById('lobby-screen').style.display !== 'none') { 
+                 goToScreen('select-screen'); 
+                 initSelection(); 
+             }
+        }
+        
+        if (data.gameState) { const remoteState = JSON.parse(data.gameState); applyRemoteState(remoteState); }
+        if (data.chat && Array.isArray(data.chat)) { renderChat(data.chat); }
+
+    }, (error) => { console.error("Snapshot Error:", error); });
+}
+
+// --- GAME LOGIC ---
+const SUMMON_THE_DEATH = {
+    name: "The Death", hp: 1, spd: 1, dmg: 0, def: 0,
+    passives: [
+        {name: "Death", desc: "Basic attack sets target HP to 1, then The Death dies."},
+        {name: "Death Explosion", desc: "On hit: Deals 200 Field Pierce Dmg. Rolls Dice for all units (1: Safe, 2-5: Perfect Dmg, 6: Perfect + Curse)."},
+        {name: "Curse of Reincarnation", desc: "If a Cursed unit dies, The Death is summoned."}
+    ]
+};
+
+const SUMMON_GRAPY = {
+    name: "Test-1-Grapy", hp: 100, spd: 1, dmg: 100, def: 0,
+    passives: [{name: "Autoattack", desc: "User can't attack. Attacks when enemies act."}]
+};
+
+const SUMMON_GROOM = {
+    name: "Test-4-Groom", hp: 400, spd: 1, dmg: 350, def: 0, pierce: true,
+    passives: [{name: "Autoattack2", desc: "User can't attack. Attacks when enemies don't act."}]
+};
+
+const SUMMON_TESAR = {
+    name: "Tesar M1", hp: 250, spd: 0, dmg: 0, def: 0,
+    passives: [{name: "AutoDefense", desc: "Shields ally (Max 1 per ally)."}]
+};
+
+const CHARACTERS = [
+    { id: 'knight', name: 'Knight', role: 'Tank', hp: 1200, def: 100, mana: 200, spd: 1, dmg: 200, passives: [{name: 'Blessing of ArkShield', desc: 'If HP < 400, gain +100 Dmg & Def.'},{name: 'Resting', desc: 'If turn skipped, +300 Mana & +50 HP.'}], skills: [{ id: 'absorb', name: 'Dmg Absorption', cost: 400, type: 'active', desc: 'For 2 hits: -50% Dmg taken. Hits taken buff next Base Attack by +50.' }, { id: 'strike', name: 'Lawful Strike', cost: 500, type: 'active', desc: 'Deals 500 direct damage.' }] },
+    { id: 'archer', name: 'Archer', role: 'DPS', hp: 800, def: 50, mana: 600, spd: 2, dmg: 200, pierce: true, passives: [{name: 'Sharp Eye', desc: 'Base attacks pierce defense.'},{name: 'Waiting', desc: 'If speed not used, +100 Mana per speed.'}], skills: [{ id: 'armor', name: 'Chainmail', cost: 300, type: 'active', desc: '+150 Def, -1 Spd, -100 Base Dmg.' }, { id: 'jab', name: 'Hooligan Jab', cost: 500, type: 'active', desc: 'Deals 50 dmg and Stuns target.' }, { id: 'last', name: 'Last Arrow', cost: 600, type: 'active', desc: 'Deals double dmg but take double dmg. Permanent, Once.' }] },
+    { id: 'magician', name: 'Magician', role: 'Mage', hp: 350, def: 0, mana: 600, spd: 1, dmg: 100, pierce: true, teamDmg: true, passives: [{name: 'Mana Up', desc: '+250 Mana self, +100 allies/turn. x2 if Shield off.'},{name: 'Chaotic Magic', desc: 'Base attacks deal damage to ALL enemies.'}], skills: [{ id: 'shield', name: 'Shield of Mana', cost: 0, type: 'active', desc: 'Toggle: Dmg depletes Mana instead of HP. (Default On)' }, { id: 'protect', name: 'Knight Protect', cost: 500, type: 'active', desc: 'Blocks next attack on ally. Max 1.' }, { id: 'freeze', name: 'Freeze Up', cost: 1000, type: 'active', desc: 'Stuns all enemies.' }, { id: 'vitagus', name: 'Vitagus', cost: 1500, type: 'active', desc: 'Heals self +250, allies +500.' }, { id: 'mainto', name: 'Mainto', cost: 0, type: 'active', desc: 'Steal all mana from allies.' }, { id: 'ragardo', name: 'Ragardo', cost: 2000, type: 'active', desc: '500 Perfect Field Dmg.' }] },
+    { id: 'rogue', name: 'Rogue', role: 'Assassin', hp: 650, def: 50, mana: 100, spd: 2, dmg: 50, pierce: true, potions: 1, passives: [{name: 'Dexterity', desc: 'Skip turn = Double Speed.'},{name: 'I Can See', desc: '1/6 Chance to dodge.'},{name: 'The Weakness', desc: '6 Hits = Mark. x2 Dmg to Marked.'}], skills: [{ id: 'potion', name: 'Secret Potion', cost: 0, type: 'active', desc: 'Heal ally 250 HP + 400 Mana. (Cost: 1 Potion).' }, { id: 'teamup', name: 'Team Up', cost: 500, type: 'active', desc: 'For 1 turn, all allies deal x2 Base Dmg.' }] },
+    { id: 'priest', name: 'Priest', role: 'Support', hp: 800, def: 0, mana: 0, spd: 1, dmg: 200, passives: [{name: 'Move On', desc: 'Base attack heals self/allies 50.'}, {name: 'Blue Light', desc: 'Healing gives x2 Mana.'}], skills: [{ id: 'shame', name: 'Shame', cost: 200, type: 'active', desc: 'All enemies burn 2 rounds.' }, { id: 'divine', name: 'Divine Light', cost: 600, type: 'active', desc: 'Next attack heals allies equal to dmg. 0 Speed cost.' }] },
+    { id: 'bard', name: 'Bard', role: 'Support', hp: 700, def: 0, mana: 0, spd: 1, dmg: 200, passives: [{name: 'Background Ritmo', desc: 'Alive: Allies +50 Def, +100 HP, +200 Mana, +50 Dmg.'}], skills: [{ id: 'doremi', name: 'Do-re-mi', cost: 0, type: 'active', desc: '50% base dmg as field dmg.' }, { id: 'song', name: 'Song of Speed', cost: 0, type: 'active', desc: 'Use all speed. Skip turn. Then team x2 Speed.' }, { id: 'charge', name: 'Fa#-Re-Do#', cost: 0, type: 'active', desc: 'Charge up +100 Dmg (Max 6). Attack resets.' }] },
+    { id: 'sorcerer', name: 'Sorcerer', role: 'Mage', hp: 550, maxHp: 1000, def: 0, mana: 0, spd: 1, dmg: 150, pierce: true, passives: [{name: 'Pain Power', desc: 'Marked unit dmg taken -> Mana x2.'},{name: 'Dark Blood', desc: 'Marked unit taken dmg -> Sorc Heals 100.'},{name: 'Aragarda', desc: 'Per 1000 Mana = x2 Dmg.'}], skills: [{ id: 'pain', name: 'Pg 31: Pain Power', cost: 0, type: 'active', desc: 'Mark target "Pain Power" (Max 3).' }, { id: 'ragardo', name: 'Pg 12: Ragardo', cost: 1500, type: 'active', desc: '200 Perfect Field Dmg.' }, { id: 'pulvis', name: 'Pg 13: Fiat', cost: 500, type: 'active', desc: '400 Pierce Dmg.' }] },
+    { id: 'druid', name: 'Druid', role: 'Shifter', hp: 500, def: 0, mana: 0, spd: 1, dmg: 100, passives: [{name: 'Shapeshifter', desc: 'Transform to Bear, Fox, or Axolotl.'}], skills: [{ id: 'bear', name: 'Bear Spirit', cost: 0, type: 'active', desc: '+700 HP, +150 Dmg.' }, { id: 'fox', name: 'Fox Spirit', cost: 0, type: 'active', desc: '+200 HP, +1 Spd, Pierce. <500 HP Enemy = x2 Dmg.' }, { id: 'axo', name: 'Axolotl Spirit', cost: 0, type: 'active', desc: 'Team Dmg, Max 600 HP, Heal 150/turn.' }, { id: 'barrier', name: 'Nature Protect Us', cost: 0, type: 'active', desc: 'Pay 250 HP. Summon 500 HP Barrier.' }] },
+    { id: 'cleric', name: 'Cleric', role: 'Healer/Nuke', hp: 700, maxHp: 1000, def: 50, mana: 0, spd: 1, dmg: 250, passives: [{name: 'Closer to God', desc: 'Fate stacks: +50 HP/+100 Mana. Max Fate: Die next turn.'},{name: 'Angel Guardian', desc: 'Summons Angel upon death.'}], skills: [{ id: 'pray', name: 'Pray', cost: 0, type: 'active', desc: 'Gain 1 Fate Stack (Max 3).' }, { id: 'wrath', name: 'Wrath of God', cost: 0, type: 'active', desc: 'Use ALL mana. 100 Mana = 100 Pierce Field Dmg.' }] },
+    { id: 'artificer', name: 'Artificer', role: 'Summoner', hp: 800, def: 50, mana: 0, spd: 2, dmg: 0, summons: [SUMMON_GRAPY, SUMMON_GROOM, SUMMON_TESAR], passives: [{name: 'Master Builder', desc: 'Can maintain up to 3 constructs.'}], skills: [{ id: 'grapy', name: 'First Creation', cost: 0, type: 'active', desc: 'Summon Test-1-Grapy. Max 2.' }, { id: 'groom', name: 'Groom', cost: 0, type: 'active', desc: 'Summon Test-4-Groom. Max 1.' }, { id: 'tesar', name: 'Tesar M1', cost: 0, type: 'active', desc: 'Summon Tesar-M1 on ally. Max 1 per ally.' }] },
+    { id: 'mina', name: 'Mina', role: 'Special', hp: 1500, def: 0, mana: 0, spd: 3, dmg: 50, passives: [{name: 'Custodian Barrier', desc: 'Incoming Dmg set to 100. Max HP locked.'},{name: 'Church Wardens Seal', desc: 'Teammates heal 100 HP per hit received while Mina is alive.'}], skills: [{ id: 'vexing', name: 'Vexing Scripture', cost: 0, type: 'active', desc: 'Attach Scripture (Summon) to target. Deals 50+50/turn Dmg.' }, { id: 'averse', name: 'Averse', cost: 200, type: 'active', desc: 'Set target MaxHP to current. Healing becomes Damage x2.' }] },
+    { id: 'ramiel', name: 'Ramiel', role: 'Special', hp: 800, def: 100, mana: 0, spd: 1, dmg: 200, pierce: true, passives: [{name: 'Church Seal', desc: 'If target HP <= 50%, Deal 9000 Perfect Dmg.'},{name: 'Divine Favor', desc: 'End of turn: Deal 500 Perfect Dmg to highest HP card.'}], skills: [{ id: 'blessing', name: 'Blessing', cost: 0, type: 'active', desc: 'Heal target = Ramiel HP. If ally, Ramiel takes Perfect Dmg.' }, { id: 'heaven', name: 'Heaven', cost: 200, type: 'active', desc: 'Pay 200 HP. All cards Speed 0 until next turn.' }] },
+    { id: 'zephyr', name: 'Zephyr', role: 'DPS', hp: 1000, def: 50, mana: 0, particles: 3, spd: 1, dmg: 200, summons: [SUMMON_THE_DEATH], passives: [{name: 'Scythe of Mad God', desc: 'Basic: 1,3,6 = +500 Dmg, Self 250 Perfect, +3 Particles. Else +1 Particle.'},{name: 'Like it was Air', desc: 'HP<450: Roll 1,3,6 to dodge. Fail = Next turn Perfect Dmg.'}], skills: [{ id: 'sharpness', name: 'Sharpness Air', cost: 2, type: 'active', desc: '450 Pierce Dmg.' }, { id: 'tornado', name: 'Tornado Blades', cost: 1, type: 'active', desc: '100 Field Pierce. Recurs on turn start.' }, { id: 'gerald', name: 'Power of Gerald', cost: 6, type: 'active', desc: 'Requires Death. Next 3 Attacks are Insta-Kill & Anti-Revive.' }, { id: 'death', name: 'The Death', cost: 3, type: 'active', desc: 'Summon The Death. Shared Turn Lock.' }] },
+    { id: 'aidan', name: 'Aidan', role: 'Tank/DPS', hp: 2000, def: 100, mana: 450, spd: 1, dmg: 50, passives: [{name: 'Hammer of Planck', desc: 'Basic Atk x2 dmg. Reset on skill.'},{name: 'Danatris Inspiration', desc: 'Take >750 dmg = Deal 300 Pierce back & +1 Speed.'}], skills: [{ id: 'inferno', name: 'Inferno', cost: 450, type: 'active', desc: '400 Pierce Field. Recurrs for half dmg.' }, { id: 'kamikaze', name: 'Kamikaze', cost: 0, type: 'active', desc: 'Sacrifice HP -> Perfect Dmg.' }, { id: 'collapse', name: 'Hammer Collapsing', cost: 0, type: 'active', desc: 'x4 Basic Dmg. Fixes Dmg. 1 Turn Wait.' }] },
+    { id: 'kotone', name: 'Kotone Akiba', role: 'DPS/Utility', hp: 700, def: 0, mana: 0, spd: 1, dmg: 250, pierce: true, passives: [{name: 'Entangle', desc: '25% to Stun foe+self on hit. Break -> Time Bomb.'},{name: 'Blink', desc: '30% chance to dodge non-perfect hits and deal 400 Perfect DMG to random enemy.'},{name: 'Mad-Dog', desc: 'HP<=350: Speed=2, 50% Ignore Dmg, 66% Apply Time Bomb.'},{name: 'Time Bomb', desc: '2 Rounds -> 200 Team Perfect. Attack -> 400 Perfect + Field Wipe.'}], skills: [] },
+    { id: 'deathsniper', name: 'Death Sniper', role: 'DPS', hp: 500, def: 0, mana: 0, spd: 1, dmg: 350, pierce: true, bullets: 0, passives: [{name: 'Spec-Op Mask', desc: 'Immune: Stun, Field/Chain Dmg, Slows.'},{name: 'Hologram Dummy', desc: 'On hit: Summon Hologram & Hide. Hidden = Untargetable.'},{name: 'Ambush', desc: 'Airdrop Killer takes x2/x4/x8 damage forever.'}], skills: [{id: 'airdrop', name: 'Airdrop', cost: 0, type: 'active', desc: 'Full Heal, +1 Bullet, Summon Airdrop.'}, {id: 'dragonsniper', name: 'Dragon Sniper', cost: 1, type: 'active', desc: '1000 Perfect DMG. +1 Max Speed.'}] },
+    { id: 'yizama', name: 'Kid Yizama Kamaru', role: 'Hero', hp: 300, def: 150, armor: 250, mana: 2000, spd: 3, dmg: 50, passives: [{name: 'Build Up!!!', desc: 'Atk: +150 Mana, +50 HP/Armor, +50 Dmg/Pierce (1 Turn).'},{name: 'Hero Sacrifice', desc: 'Intercepts ally damage. On hit: Field(+Mana/Armor), Pierce(+Spd/HP), Perfect(+Spd/HP).'}], skills: [{id: 'omega', name: 'Omega God Speed', cost: 0, type: 'active', desc: 'Gain +2 Speed. (2 Uses).'}, {id: 'void', name: 'Curses from Void', cost: 150, type: 'active', desc: 'Halve Stats. Apply Void Curse (Death = No Revive + Execution).'}, {id: 'cosmic', name: 'Cosmic Cannon', cost: 500, type: 'active', desc: 'Roll Dice (2,6): Deal Team Perfect Dmg equal to Armor.'}] }
+];
+
+// Classes & Game Functions
+class BattleCard {
+    constructor(t, team, id) { 
+        Object.assign(this, t); 
+        this.template = t; this.team = team; this.uid = id; 
+        this.maxHp = t.hp; this.armor = t.armor || 0; this.maxMana = 2000; 
+        this.moves = 0; this.effects = {}; 
+        this.manaShield = true; this.hasMoved = false; this.guardedBy = null; this.guarding = null;
+        if(t.particles !== undefined) this.particles = t.particles;
+        if(t.bullets !== undefined) this.bullets = t.bullets;
+        if(this.name === 'Aidan') this.planckMultiplier = 1;
+        if(this.name === 'Kotone Akiba') { this.blinkUsed = false; }
+        if(this.name === 'Death Sniper') { this.hidden = false; this.ambushMultipliers = {}; this.baseSpd = t.spd; }
+        if(this.name === 'Kid Yizama Kamaru') { this.omegaUses = 2; }
+        this.lastAttacker = null;
+    }
+    
+    takeDamage(amount, type, source, ability="Base Attack") {
+        if (this.dead) return;
+        
+        // --- YIZAMA INTERCEPTION ---
+        // If this unit is NOT Yizama, check if an ally Yizama is alive to intercept
+        if (this.name !== 'Kid Yizama Kamaru' && ability !== 'Yizama Interception') {
+            const yizama = window.gameState.cards.find(c => c.name === 'Kid Yizama Kamaru' && c.team === this.team && !c.dead && c.uid !== this.uid);
+            if (yizama) {
+                log(`🛡️ Kid Yizama Kamaru sacrifices himself to protect ${this.name}!`);
+                yizama.takeDamage(amount, type, source, 'Yizama Interception');
+                return;
+            }
+        }
+
+        // --- YIZAMA BUFFS ON HIT ---
+        if (this.name === 'Kid Yizama Kamaru') {
+            if (type === 'field' || type === 'team') {
+                this.mana += 500; this.armor += 200;
+                log("Hero's Sacrifice (Field Hit): +500 Mana, +200 Armor");
+            } else if (type === 'pierce') {
+                this.spd += 5; this.hp += 250;
+                log("Hero's Sacrifice (Pierce Hit): +5 Speed, +250 HP");
+            } else if (type === 'perfect') {
+                this.spd += 20; this.hp += 1000;
+                log("Hero's Sacrifice (Perfect Hit): +20 Speed, +1000 HP");
+            }
+        }
+
+        this.lastAttacker = source ? source.uid : null;
+        SoundManager.play('attack');
+        let damageSource = source ? source.name : "Unknown";
+
+        // --- SPEC-OP MASK IMMUNITIES ---
+        if (this.name === 'Death Sniper') {
+            if (type === 'field' || type === 'chain' || source === this) {
+                log(`Death Sniper mask ignored ${type} damage.`);
+                return;
+            }
+        }
+
+        // --- ZEPHYR: LIKE IT WAS AIR ---
+        if (this.name === 'Zephyr' && this.hp < 450 && type !== 'perfect') {
+            const roll = Math.floor(Math.random() * 6) + 1;
+            if ([1, 3, 6].includes(roll)) {
+                log(`Zephyr (HP<450) Rolled ${roll}: Dodged attack!`);
+                return;
+            } else {
+                log(`Zephyr (HP<450) Rolled ${roll}: Took damage. Next turn damage is PERFECT.`);
+                this.effects.zephyrRage = true; // Flag for next turn
+            }
+        }
+
+        // --- KOTONE BLINK ---
+        if (this.name === 'Kotone Akiba' && !this.blinkUsed && type !== 'perfect') {
+            if (Math.random() < 0.3) {
+                log("Kotone Blinked! Dodged attack.");
+                this.blinkUsed = true;
+                this.moves = 0; 
+                const enemies = window.gameState.cards.filter(c => c.team !== this.team && !c.dead);
+                if (enemies.length > 0) {
+                    const victim = enemies[Math.floor(Math.random() * enemies.length)];
+                    log(`Kotone appears behind ${victim.name}! Deals <span class="dmg-perfect">400 PERFECT DMG</span>.`);
+                    victim.takeDamage(400, 'perfect', this, "Blink Counter");
+                }
+                return; 
+            }
+        }
+
+        // --- KOTONE MAD DOG ---
+        if (this.name === 'Kotone Akiba' && this.hp <= 350 && type !== 'perfect') {
+            const roll = Math.floor(Math.random() * 6) + 1;
+            if ([2, 4, 6].includes(roll)) {
+                log(`Kotone Mad-Dog Rage (Rolled ${roll}): Ignored Damage!`);
+                return;
+            }
+        }
+
+        // --- DEATH SNIPER HOLOGRAM ---
+        if (this.name === 'Death Sniper' && this.hidden && type !== 'perfect') {
+            log("Death Sniper is hidden! Attack missed.");
+            return;
+        }
+
+        // --- THE DEATH: EXPLOSION ---
+        if (this.name === 'The Death') {
+             log("The Death was hit! EXPLOSION triggered!");
+             doFieldDmg(this, 200, 'pierce', "Death Explosion");
+             window.gameState.cards.forEach(c => { if(!c.dead && !c.isSummon) { 
+                 const r = Math.floor(Math.random()*6)+1;
+                 if(r === 1) { log(`${c.name} Rolled ${r}: Safe.`); }
+                 else if(r>=2 && r<=5) { log(`${c.name} Rolled ${r}: Takes 200 Perfect Damage.`); c.takeDamage(200, 'perfect', this, "Death Curse"); }
+                 else if(r===6) { log(`${c.name} Rolled ${r}: Takes 300 Perfect Dmg & Cursed.`); c.takeDamage(300, 'perfect', this, "Death Curse Crit"); c.effects.cursedDeath = true; }
+             }});
+        }
+
+        // --- ENTANGLE BREAK ---
+        if (this.effects.entangledWith) {
+             const partnerId = this.effects.entangledWith;
+             delete this.effects.entangledWith;
+             this.effects.stun = 0;
+             this.stunned = false;
+             const partner = window.gameState.cards.find(c => c.uid === partnerId);
+             if (partner) {
+                 delete partner.effects.entangledWith;
+                 partner.effects.stun = 0;
+                 partner.stunned = false;
+                 log("Entangle Broken!");
+                 if (this.name === 'Kotone Akiba') {
+                     partner.effects.timeBomb = 2; log(`Kotone planted Time Bomb on ${partner.name}!`);
+                 } else if (partner.name === 'Kotone Akiba') {
+                     this.effects.timeBomb = 2; log(`Kotone planted Time Bomb on ${this.name}!`);
+                 }
+             }
+        }
+
+        if (this.guardedBy) { const g = window.gameState.cards.find(c=>c.uid===this.guardedBy); if(g) { log(`🛡️ Tesar intercepted! ${this.name} redirected damage to Tesar.`); g.takeDamage(amount,type,source,ability); return; } else this.guardedBy=null; }
+        
+        const barrier = window.gameState.cards.find(c => c.team === this.team && c.name === 'Barrier' && !c.dead);
+        if (barrier && this.name !== 'Barrier' && this.name !== 'Tesar' && this.name !== 'Kid Yizama Kamaru') {
+            log(`🌿 Nature Barrier! Damage to ${this.name} redirected.`);
+            let multiplier = (type === 'field' || type === 'team') ? 2 : 1;
+            barrier.takeDamage(amount * multiplier, type, source, ability);
+            return; 
+        }
+
+        if (this.name === 'Rogue' && Math.random() < 0.166) { log(`${this.name} dodged the attack from ${damageSource}!`); return; }
+        if (this.effects.dmgAbsorb > 0) { amount = Math.floor(amount * 0.5); this.effects.dmgAbsorb--; this.effects.absorbBuff = (this.effects.absorbBuff || 0) + 50; log("Knight absorbed damage (-50%). Gained +50 dmg for next attack!"); }
+        if (this.name === 'Magician' && this.manaShield && this.mana > 0) { if (this.mana >= amount) { this.mana -= amount; log(`Magician blocked ${amount} dmg with Mana.`); return; } else { amount -= this.mana; this.mana = 0; log("Magician mana shield broken!"); } }
+        if (this.effects.knightProtect) { log(`${this.name} completely blocked the attack from ${damageSource}!`); this.effects.knightProtect = false; return; }
+
+        let actual = amount;
+        if(type !== 'pierce' && type !== 'perfect') {
+            actual = Math.max(0, actual - this.def);
+            if(this.armor > 0) { 
+                if(this.armor >= actual) { this.armor -= actual; actual = 0; log(`${this.name}'s Armor absorbed the hit.`); } 
+                else { actual -= this.armor; this.armor = 0; log(`${this.name}'s Armor broke!`); } 
+            }
+        }
+        if (this.effects.painPower) { this.mana += (actual*2); let s = window.gameState.cards.find(c=>c.name==='Sorcerer' && c.team===this.team); if(s) s.heal(100); }
+        if (this.effects.lastArrow) actual *= 2;
+
+        this.hp -= actual;
+        let dmgClass = type === 'perfect' ? 'dmg-perfect' : (type === 'pierce' ? 'dmg-pierce' : 'dmg-normal');
+        let dmgText = type === 'perfect' ? 'PERFECT DMG' : (type === 'pierce' ? 'PIERCING DMG' : 'DMG');
+        log(`${this.name} took <span class="${dmgClass}">${actual} ${dmgText}</span> from ${damageSource} using ${ability}.`);
+
+        if(this.name === 'Death Sniper' && !this.hidden && actual > 0) { log("Death Sniper deploys Hologram and vanishes!"); attemptSummon(this, 'Hologram', {hp:50,def:0,spd:0}); this.hidden = true; }
+        if(this.hp <= 0) this.die();
+        const mina = window.gameState.cards.find(c=>c.team===this.team && c.name==='Mina' && !c.dead);
+        if(mina && this.name!=='Mina') { this.heal(100); log(`${this.name} healed 100 HP by Mina's Seal.`); }
+        this.checkPassives();
+    }
+    heal(amt) {
+        if(this.dead) return;
+        if(this.effects.averse) { log(`${this.name} is Averse! Healing became Damage.`); this.takeDamage(amt*2, 'perfect', null, "Averse Backlash"); return; }
+        if (this.name === 'Priest') { this.mana += (amt * 2); log("Priest Blue Light: Converted heal to Mana."); }
+        this.hp = Math.min(this.hp + amt, this.maxHp);
+        log(`${this.name} healed ${amt} HP.`);
+        this.checkPassives();
+    }
+    checkPassives() {
+        if (this.name === 'Knight') {
+            if (this.hp < 400 && !this.effects.arkShield) { this.dmg += 100; this.def += 100; this.effects.arkShield = true; log("Knight's Blessing of ArkShield activated! (+100 Dmg/Def)"); } 
+            else if (this.hp >= 400 && this.effects.arkShield) { this.dmg -= 100; this.def -= 100; this.effects.arkShield = false; log("Knight's Blessing of ArkShield deactivated."); }
+        }
+    }
+    die() {
+        this.dead = true; this.hp = 0; log(`${this.name} has died!`);
+        
+        if (this.effects.voidCurse) {
+            log(`BROKEN HERO: ${this.name} suffers Execution! Cannot revive for 3 turns.`);
+            this.effects.reviveBlock = 3; 
+            // 9999 Pierce Damage effect (Visual/Logical confirmation of death)
+            this.hp = -9999;
+        }
+
+        if(this.effects.cursedDeath) { const z = window.gameState.cards.find(c=>c.name==='Zephyr' && !c.dead); if(z) { log("Curse of Reincarnation activated! The Death returns."); attemptSummon(z, 'The Death', SUMMON_THE_DEATH); } }
+        if(this.name === 'Bard') { log("Bard died! Team loses buffs."); window.gameState.cards.filter(c=>c.team===this.team).forEach(c=>{c.def-=50; c.maxHp-=100; c.dmg-=50; if(c.hp>c.maxHp)c.hp=c.maxHp; delete c.effects.bardBuff;}); }
+        if (this.name === 'Tesar' && this.guarding) { const protectedUnit = window.gameState.cards.find(c => c.uid === this.guarding); if (protectedUnit) { protectedUnit.guardedBy = null; log(`Tesar guarding ${protectedUnit.name} destroyed!`); } }
+        if(this.name === 'Cleric') summonUnit('Angel', this.team, {name:'Angel',hp:400,def:0,dmg:50, armor:100, isSummon:true});
+        if(this.name === 'Barrier') { log("🌿 Nature Barrier Broken! Team healed for 100 HP."); window.gameState.cards.filter(c=>c.team===this.team).forEach(c=>c.heal(100)); }
+        if(this.isSummon) { const idx = window.gameState.cards.indexOf(this); if(idx>-1) { window.gameState.cards.splice(idx,1); log(`${this.name} removed from battlefield.`); renderBoard(); } return; }
+        if(this.name === 'Death Sniper') { const a = window.gameState.cards.find(c=>c.name==='Airdrop' && c.team===this.team); if(a) { log("Death Sniper died! Airdrop explodes!"); doFieldDmg(this, 500, 'perfect', "Airdrop Explosion"); a.die(); } }
+        if(this.name === 'Airdrop') { const killer = window.gameState.cards.find(c=>c.uid===this.lastAttacker); if(killer && killer.team!==this.team) { log(`${killer.name} gains 1200 Mana from Airdrop.`); killer.mana+=1200; const s = window.gameState.cards.find(c=>c.name==='Death Sniper' && c.team===this.team); if(s) { s.ambushMultipliers[killer.uid] = (s.ambushMultipliers[killer.uid]||1)*2; log(`Death Sniper AMBUSH activated! x${s.ambushMultipliers[killer.uid]} DMG vs ${killer.name}.`); } } else if (killer) { log(`Ally destroyed Airdrop. Converting Mana to HP for ${killer.name}.`); killer.heal(600); } }
+        if (this.name === 'Hologram') { const sniper = window.gameState.cards.find(c => c.name === 'Death Sniper' && c.team === this.team); if (sniper && !sniper.dead) { log("Hologram destroyed! Sniper reveals himself with +1 Speed."); sniper.hidden = false; sniper.spd += 1; sniper.baseSpd = (sniper.baseSpd || 1) + 1; } }
+        checkWinCondition();
+    }
+}
+
+window.gameState = { phase: 'select', p1Team: [], p2Team: [], turn: 'p1', round: 1, cards: [], logHistory: [], teamSize: 2, playerNames: { p1: "Player 1", p2: "Player 2" } };
+
+function colorizeText(text) {
+    if (!text) return "";
+    let formatted = text;
+    window.gameState.cards.forEach(c => {
+         const color = c.team === 'p1' ? '#3b82f6' : '#ef4444'; 
+         const regex = new RegExp(`\\b${c.name}\\b`, 'gi'); 
+         formatted = formatted.replace(regex, `<span style="color: ${color}; font-weight: bold;">${c.name}</span>`);
+    });
+    return formatted;
+}
+
+function initSelection() {
+    const grid = document.getElementById('char-grid');
+    grid.innerHTML = '';
+    const instructionEl = document.getElementById('select-instruction');
+    const limit = window.gameState.teamSize || 2;
+    
+    let txt = window.isMultiplayer ? (window.myRole==='p1'? window.gameState.playerNames.p1 : window.gameState.playerNames.p2) : "Player 1";
+    instructionEl.innerText = `${txt}: Select ${limit} Cards`;
+    instructionEl.style.color = (window.isMultiplayer && window.myRole==='p2') ? "var(--p2-color)" : "var(--p1-color)";
+
+    CHARACTERS.forEach(char => {
+        // OWNERSHIP CHECK
+        const isOwned = !window.isMultiplayer || (window.currentUserProfile && window.currentUserProfile.ownedCards.includes(char.name));
+        
+        const el = document.createElement('div');
+        el.className = `char-select-card ${!isOwned ? 'taken' : ''}`; // Use taken style for unowned
+        el.id = 'select-' + char.id;
+        el.innerHTML = `<h3>${char.name}</h3><div>HP: ${char.hp}</div><div>${isOwned ? '' : '🔒 LOCKED'}</div><button class="info-btn" onclick="openInfoModal(event, '${char.id}')">Info</button>`;
+        if(isOwned) el.onclick = () => selectChar(char, el);
+        grid.appendChild(el);
+    });
+    renderSelectionUpdates(); 
+}
+
+function selectChar(char, el) {
+    const limit = window.gameState.teamSize || 2;
+    if (window.isMultiplayer) {
+        const isTaken = window.gameState.p1Team.some(c => c.id === char.id) || window.gameState.p2Team.some(c => c.id === char.id);
+        if (isTaken) return;
+        
+        // P1 Selection Logic
+        if (window.myRole === 'p1' && window.gameState.p1Team.length < limit) { 
+            window.gameState.p1Team.push(char); 
+            renderSelectionUpdates(); // Immediate Local Update
+            updateRemoteState(); 
+        }
+        // P2 Selection Logic
+        else if (window.myRole === 'p2' && window.gameState.p2Team.length < limit) { 
+            window.gameState.p2Team.push(char); 
+            renderSelectionUpdates(); // Immediate Local Update
+            updateRemoteState(); 
+        }
+    } else {
+        const p1Full = window.gameState.p1Team.length >= limit;
+        const p2Full = window.gameState.p2Team.length >= limit;
+        if (!p1Full) { if (!window.gameState.p1Team.some(c => c.id === char.id)) window.gameState.p1Team.push(char); } 
+        else if (!p2Full) { if (!window.gameState.p2Team.some(c => c.id === char.id)) window.gameState.p2Team.push(char); }
+        renderSelectionUpdates();
+        if (window.gameState.p1Team.length === limit && window.gameState.p2Team.length === limit) setTimeout(startBattle, 500);
+    }
+}
+
+function renderSelectionUpdates() {
+    const limit = window.gameState.teamSize || 2;
+    document.querySelectorAll('.char-select-card').forEach(el => el.classList.remove('selected', 'selected-p2', 'taken'));
+    [...window.gameState.p1Team, ...window.gameState.p2Team].forEach(c => {
+        const el = document.getElementById('select-'+c.id);
+        if(el) {
+            if (window.gameState.p1Team.some(p1c => p1c.id === c.id)) { el.classList.add('selected'); if(window.isMultiplayer && window.myRole==='p2') el.classList.add('taken'); }
+            else { el.classList.add('selected-p2'); if(window.isMultiplayer && window.myRole==='p1') el.classList.add('taken'); }
+        }
+    });
+    
+    // Auto-Start Check for Host
+    if (window.isMultiplayer && window.myRole === 'p1' && window.gameState.phase === 'select') {
+        if (window.gameState.p1Team.length === limit && window.gameState.p2Team.length === limit) {
+            // Ensure we don't start multiple times
+            if (!window.battleStarting) {
+                window.battleStarting = true;
+                setTimeout(() => startBattle(), 500); 
+            }
+        }
+    }
+}
+
+function startBattle(skipInit = false) {
+    if (battleStartedLocal && !skipInit) return;
+    if (!skipInit) {
+        battleStartedLocal = true;
+        window.gameState.phase = 'battle';
+        window.gameState.cards = [];
+        window.gameState.p1Team.forEach((t,i) => window.gameState.cards.push(new BattleCard(t,'p1',`p1-${i}`)));
+        window.gameState.p2Team.forEach((t,i) => window.gameState.cards.push(new BattleCard(t,'p2',`p2-${i}`)));
+        window.gameState.cards.forEach(c => {
+            if(window.gameState.cards.some(m=>m.team===c.team && m.name==='Bard')) { c.def+=50; c.maxHp+=100; c.hp+=100; c.mana+=200; c.dmg+=50; c.effects.bardBuff=true; }
+            if(c.name==='Sorcerer') c.effects.painPower=true;
+        });
+        window.gameState.turn = Math.random()>0.5 ? 'p1' : 'p2';
+        
+        const p1n = window.gameState.playerNames.p1;
+        const p2n = window.gameState.playerNames.p2;
+        log(`${p1n}: ${Math.floor(Math.random()*20)}, ${p2n}: ${Math.floor(Math.random()*20)}. ${window.gameState.turn === 'p1' ? p1n : p2n} Starts!`);
+        startTurn();
+        updateRemoteState();
+    }
+    goToScreen('battle-screen');
+}
+
+function startTurnTimer() {
+    clearInterval(window.turnTimerInterval);
+    let timeLeft = 120;
+    const timerEl = document.getElementById('timer-display');
+    timerEl.innerText = timeLeft;
+    timerEl.classList.remove('warning');
+    window.turnTimerInterval = setInterval(() => {
+        timeLeft--;
+        timerEl.innerText = timeLeft;
+        if(timeLeft <= 10) timerEl.classList.add('warning');
+        if(timeLeft <= 0) { clearInterval(window.turnTimerInterval); if(!window.isMultiplayer || window.gameState.turn === window.myRole) endTurn(); }
+    }, 1000);
+}
+
+function startTurn() {
+    startTurnTimer();
+    if(window.gameState.heavenActive && window.gameState.heavenActive.turn === window.gameState.turn) {
+        log("Heaven expires. Speed restored.");
+        window.gameState.heavenActive = null;
+    }
+    window.gameState.cards.forEach(c => {
+        if(c.dead) { 
+            if(c.effects.reviveBlock) c.effects.reviveBlock--;
+            
+            if(c.name==='Aidan' && c.effects.reviveTurns > 0) { 
+                if (c.effects.reviveBlock > 0) {
+                    log("Aidan tries to regenerate, but Void Curse blocks it!");
+                } else {
+                    c.heal(200); c.effects.reviveTurns--; log(`Aidan regenerates 200 HP. (${c.effects.reviveTurns} turns left)`); 
+                }
+            } 
+            return; 
+        }
+        
+        if (c.effects.timeBomb) {
+            c.effects.timeBomb--;
+            if (c.effects.timeBomb <= 0) {
+                log(`💣 Time Bomb explodes on ${c.name}! <span class="dmg-perfect">200 PERFECT DMG</span> to team.`);
+                window.gameState.cards.filter(t => t.team === c.team && !t.dead).forEach(t => t.takeDamage(200, 'perfect', c, "Time Bomb"));
+                delete c.effects.timeBomb;
+            } else {
+                log(`💣 Time Bomb ticking on ${c.name}... (${c.effects.timeBomb})`);
+            }
+        }
+
+        if(c.effects.burn) { c.takeDamage(50,'pierce',c, "Burn Effect"); c.effects.burn--; if(c.effects.burn<=0) delete c.effects.burn; }
+        if(c.effects.stun) { c.stunned=true; c.effects.stun--; if(c.effects.stun<=0) delete c.effects.stun; } else c.stunned=false;
+        
+        if(c.effects.vexed) { 
+             const dmg = 50 + (c.effects.vexed.rounds * 50);
+             c.takeDamage(dmg, 'normal', null, "Vexing Scripture");
+             c.effects.vexed.rounds++;
+        }
+
+        if(c.name==='Zephyr' && c.effects.tornadoBlades) { log("Zephyr's Tornado Blades linger..."); doFieldDmg(c,100,'pierce', "Tornado Blades"); }
+        if(c.name==='Aidan' && c.effects.infernoActive) { doFieldDmg(c,200,'pierce', "Inferno Aftershock"); c.effects.infernoActive=false; }
+        
+        if(c.team === window.gameState.turn) {
+            c.moves = c.stunned ? 0 : c.spd; c.hasMoved=false;
+            if (c.name === 'Kotone Akiba') {
+                c.blinkUsed = false; 
+                if (c.hp <= 350) { c.moves = 2; log("Kotone Mad-Dog: Speed 2"); }
+            }
+            if (c.name === 'Zephyr' && c.effects.zephyrRage) {
+                c.effects.nextPerfect = true; c.effects.zephyrRage = false;
+                log("Zephyr's rage makes his next attack PERFECT!");
+            }
+            if(c.name==='Aidan' && c.effects.danatrisSpeed) { c.moves += 1; c.effects.danatrisSpeed = false; }
+            if(window.gameState.heavenActive) c.moves = 0;
+
+            c.mana+=50;
+            if(c.name==='Magician') { c.mana+=250; window.gameState.cards.filter(a=>a.team===c.team).forEach(a=>a.mana+=100); }
+            if(c.name==='Priest') c.heal(50);
+            if(window.gameState.cards.some(a=>a.team===c.team && a.name==='Angel' && !a.dead)) { c.heal(50); c.dmg+=50; c.armor+=250; }
+            if(c.name==='Cleric' && c.effects.fateStacks>0) { c.hp+=50; c.mana+=100; if(c.effects.fateStacks>=3 && window.gameState.round>c.effects.fateTurn) c.die(); }
+            if(c.name==='Druid' && c.effects.axolotl) c.heal(150);
+
+            if(c.isSummon && (c.name.includes('Grapy')||c.name.includes('Groom'))) {
+                let enemies = window.gameState.cards.filter(e=>e.team!==c.team && !e.dead);
+                let target = enemies.find(e=>e.name==='Barrier') || enemies[0];
+                if(target) { 
+                    if(c.name.includes('Grapy')) {
+                        if(window.gameState.turnActivity) target.takeDamage(c.dmg,'normal',c, "Grapy Counter");
+                    } else {
+                        if(!window.gameState.turnActivity) target.takeDamage(c.dmg,'pierce',c, "Groom Punish");
+                    }
+                }
+            }
+        } else c.moves=0;
+    });
+    window.gameState.turnActivity = false; renderBoard();
+}
+
+function endTurn() {
+    if(window.isMultiplayer && window.gameState.turn !== window.myRole) return alert("Not your turn");
+    clearInterval(window.turnTimerInterval);
+    const ramiel = window.gameState.cards.find(c => c.name === 'Ramiel' && c.team === window.gameState.turn);
+    if(ramiel) { 
+        let highest = null; let maxHp = -1;
+        window.gameState.cards.forEach(c => { if (!c.dead && c.hp > maxHp) { maxHp = c.hp; highest = c; } });
+        if (highest) { log("Ramiel's Divine Favor strikes!"); highest.takeDamage(500, 'perfect', ramiel, "Divine Favor"); }
+    }
+
+    window.gameState.cards.forEach(c => {
+        if(c.team === window.gameState.turn && !c.dead) {
+            if(c.name==='Knight' && !c.hasMoved) { c.mana+=300; c.heal(50); log("Knight Resting: +300 Mana, +50 HP"); }
+            if(c.name==='Archer' && c.moves>0) { c.mana += (c.moves*100); log(`Archer Waiting: +${c.moves*100} Mana`); }
+            if(c.name==='Rogue' && !c.hasMoved) { c.effects.dexterity=true; log("Rogue prepares Dexterity next turn."); }
+            if(c.name==='Kid Yizama Kamaru' && c.effects.buildUpActive) {
+                c.dmg -= 50; c.pierce = false; delete c.effects.buildUpActive;
+                log("Kid Yizama Build Up bonus fades.");
+            }
+        }
+        delete c.effects.teamUp; c.effects.nextPerfect=false;
+    });
+    window.gameState.turn = window.gameState.turn === 'p1' ? 'p2' : 'p1';
+    if(window.gameState.turn==='p1') window.gameState.round++;
+    const turnName = window.gameState.turn === 'p1' ? window.gameState.playerNames.p1 : window.gameState.playerNames.p2;
+    document.getElementById('turn-indicator').innerText = `Round ${window.gameState.round} - ${turnName}`;
+    startTurn(); updateRemoteState();
+}
+
+window.cardAction = function(idx, type, payload) {
+    const c = window.gameState.cards[idx];
+    if(c.dead && c.name==='Aidan') { 
+        if (c.effects.reviveBlock > 0) return alert("Aidan cannot revive due to Void Curse!");
+        const payer = window.gameState.cards.find(u => u.team === c.team && !u.dead && u.hp > 700);
+        if(payer && confirm(`Revive Aidan? Costs 700 HP from ${payer.name}`)) {
+            payer.hp -= 700; c.dead = false; c.hp = 300; c.effects.reviveTurns = 3; c.planckMultiplier = (c.planckMultiplier || 1) + 1;
+            log("Aidan Revived! The Flame burns brighter!"); renderBoard(); updateRemoteState();
+        }
+        return; 
+    }
+    if(window.isMultiplayer && window.gameState.turn !== window.myRole) return alert("Wait for turn");
+    if(c.moves <= 0) return;
+
+    if(type==='attack') {
+        pickTarget((t)=>{
+            c.moves--; c.hasMoved=true; window.gameState.turnActivity = true;
+            
+            // --- MUTUAL EXCLUSIVITY CHECK (Zephyr / Death) ---
+            if (c.name === 'Zephyr') {
+                const death = window.gameState.cards.find(u => u.name === 'The Death' && u.team === c.team && !u.dead);
+                if(death) { death.moves = 0; }
+            } else if (c.name === 'The Death') {
+                const zephyr = window.gameState.cards.find(u => u.name === 'Zephyr' && u.team === c.team && !u.dead);
+                if(zephyr) { zephyr.moves = 0; }
+            }
+
+            // --- YIZAMA BUILD UP ---
+            if (c.name === 'Kid Yizama Kamaru') {
+                c.mana += 150; c.hp += 50; c.armor += 50;
+                c.dmg += 50; c.pierce = true; c.effects.buildUpActive = true;
+                log("Build Up!!! Yizama Stats Increased (Dmg/Pierce temporary).");
+            }
+
+            if(c.effects.timeBomb) { log(`💣 ${c.name}'s Attack triggered Time Bomb!`); c.takeDamage(400,'perfect',c, "Time Bomb Trigger"); doFieldDmg(c,400,'perfect', "Time Bomb Explosion"); delete c.effects.timeBomb; }
+            if(c.effects.divineLight) { window.gameState.cards.filter(x=>x.team===c.team).forEach(x=>x.heal(c.dmg)); delete c.effects.divineLight; log("Priest heals team via Divine Light!"); }
+            else {
+                let dt = c.pierce?'pierce':(c.effects.nextPerfect?'perfect':'normal');
+                if(c.name==='The Death') { t.hp=1; log(`${t.name}'s HP reduced to 1 by The Death!`); c.die(); }
+                else if(c.name==='Zephyr') {
+                    if(c.effects.geraldPower>0) { log("Zephyr uses SCYTHE OF DEATH (Gerald Power)!"); t.takeDamage(9999,'perfect',c, "Scythe of Death"); c.effects.geraldPower--; }
+                    else {
+                        const roll = Math.floor(Math.random()*6)+1;
+                        if([1,3,6].includes(roll)) { log(`Zephyr Scythe (Rolled ${roll}): +500 Dmg, Self 250 Perfect.`); t.takeDamage(c.dmg+500,dt,c, "Mad God Scythe"); c.takeDamage(250,'perfect',c, "Mad God Backlash"); c.particles=(c.particles||0)+3; }
+                        else { log(`Zephyr Scythe (Rolled ${roll}): +1 Particle.`); t.takeDamage(c.dmg,dt,c, "Base Attack"); c.particles=(c.particles||0)+1; }
+                    }
+                }
+                else if(c.name==='Ramiel' && t.hp<=(t.maxHp/2)) { log("Ramiel Execution! <span class='dmg-perfect'>9000 PERFECT DMG</span>."); t.takeDamage(9000,'perfect',c, "Execution"); }
+                else if(c.name==='Aidan') { let d=50*c.planckMultiplier; if(c.effects.hammerCollapse){d*=4;c.planckMultiplier=1;delete c.effects.hammerCollapse;} t.takeDamage(d,dt,c, "Hammer"); c.planckMultiplier*=2; }
+                else if(c.name==='Kotone Akiba') { 
+                    if(Math.random()<0.25){ log("Kotone Entangled the enemy!"); c.stunned=true;c.effects.stun=1;c.effects.entangledWith=t.uid;t.stunned=true;t.effects.stun=1;t.effects.entangledWith=c.uid; } 
+                    if(c.hp<=350 && Math.random()<0.66) { log("Kotone Mad-Dog placed a Time Bomb!"); t.effects.timeBomb=2; } 
+                    t.takeDamage(c.dmg,dt,c, "Base Attack"); 
+                }
+                else if(c.name === 'Death Sniper') {
+                    if (c.hidden) c.hidden = false;
+                    if (c.ambushMultipliers[t.uid]) {
+                        const mult = c.ambushMultipliers[t.uid];
+                        log(`Death Sniper Ambush Bonus x${mult}!`);
+                        t.takeDamage(c.dmg * mult, dt, c, "Ambush Shot");
+                    } else {
+                        t.takeDamage(c.dmg, dt, c, "Sniper Shot");
+                    }
+                }
+                else {
+                    if(c.name==='Rogue') { c.effects.marks=(c.effects.marks||0)+1; if(c.effects.marks>=6) dt='perfect'; }
+                    let dmg = c.dmg + (c.effects.absorbBuff||0); if(c.effects.absorbBuff) log(`Knight Unleashed: +${c.effects.absorbBuff} Dmg!`); c.effects.absorbBuff=0;
+                    if(c.name==='Druid' && c.effects.foxSpirit && t.hp<500) dmg*=2;
+                    if(c.name==='Druid' && c.effects.axolotl) doFieldDmg(c,dmg,'normal', "Axolotl Splash");
+                    else t.takeDamage(dmg,dt,c, "Base Attack");
+                    if(c.name==='Priest') window.gameState.cards.filter(x=>x.team===c.team).forEach(x=>x.heal(50));
+                }
+            }
+            renderBoard(); updateRemoteState();
+        });
+    } else {
+        const skill = c.template.skills[payload];
+        if(c.name==='Aidan' && skill.id!=='collapse') c.planckMultiplier=1;
+        if (skill.id === 'blessing' || skill.id === 'kamikaze') { /* No cost */ }
+        else if (skill.id === 'heaven' || skill.id === 'averse' || skill.id === 'barrier') {
+             if (c.hp <= (skill.id==='barrier'?250:200)) return alert("Not enough HP");
+        } 
+        else if (skill.id === 'omega') {
+             if (c.omegaUses <= 0) return alert("Out of uses.");
+        }
+        else if (c.particles !== undefined) {
+             if (c.particles < skill.cost) return alert("Not enough Particles");
+        }
+        else if (c.bullets !== undefined) {
+             if (c.bullets < skill.cost) return alert("Not enough Bullets");
+        }
+        else {
+            if(c.mana<skill.cost) return alert("No Mana");
+        }
+        
+        const exec = (t) => {
+            if (skill.id === 'heaven' || skill.id === 'averse') c.hp -= 200;
+            else if (skill.id === 'barrier') c.hp -= 250;
+            else if (skill.id === 'omega') { c.omegaUses--; }
+            else if (c.particles !== undefined) c.particles -= skill.cost;
+            else if (c.bullets !== undefined) c.bullets -= skill.cost;
+            else if (skill.id !== 'blessing' && skill.id !== 'kamikaze' && skill.id !== 'collapse') c.mana-=skill.cost;
+            
+            if(skill.id!=='divine') c.moves--; 
+            c.hasMoved=true; window.gameState.turnActivity=true;
+            
+            if (c.name === 'Zephyr') {
+                const death = window.gameState.cards.find(u => u.name === 'The Death' && u.team === c.team && !u.dead);
+                if(death) { death.moves = 0; }
+            }
+
+            applySkill(c,skill,t); updateRemoteState();
+        };
+        if(['absorb','armor','shield','freeze','vitagus','mainto','teamup','doremi','song','charge','bear','fox','axo','barrier','pray','wrath','grapy','groom','ragardo','divine','heaven','tornado','gerald','death','inferno','collapse','airdrop','omega','cosmic'].includes(skill.id)) exec(null);
+        else pickTarget(exec);
+    }
+}
+
+function applySkill(u,s,t) {
+    if(s.id==='grapy') attemptSummon(u,'Test-1-Grapy', SUMMON_GRAPY);
+    else if(s.id==='groom') attemptSummon(u,'Test-4-Groom', SUMMON_GROOM);
+    else if(s.id==='tesar') { if(t.team!==u.team || t.guardedBy) return; attemptSummon(u,'Tesar M1', SUMMON_TESAR, t); }
+    else if(s.id==='death') attemptSummon(u,'The Death', SUMMON_THE_DEATH);
+    else if(s.id==='airdrop') { attemptSummon(u,'Airdrop',{hp:500,def:0,spd:0}); u.bullets++; u.hp=u.maxHp; log("Airdrop called. HP Refilled. +1 Bullet."); }
+    else if(s.id==='vexing') attemptSummon(t,'Vexing Scripture',{hp:1,spd:0,dmg:0},t);
+    else {
+        switch(s.id) {
+            case 'sharpness': t.takeDamage(450,'pierce',u, s.name); break;
+            case 'tornado': doFieldDmg(u,100,'pierce', "Tornado"); u.effects.tornadoBlades=true; break;
+            case 'gerald': if(window.gameState.cards.some(c=>c.name==='The Death'&&!c.dead)){u.effects.geraldPower=3;log("Zephyr wields Scythe of Death!");}else log("The Death is not here."); break;
+            case 'inferno': doFieldDmg(u,400,'pierce', "Inferno"); u.effects.infernoActive=true; break;
+            case 'kamikaze': if(window.gameState.round>1){t.takeDamage(u.hp,'perfect',u, "Kamikaze"); u.die();}else log("Too early."); break;
+            case 'collapse': u.effects.hammerCollapse=true; break;
+            case 'averse': t.maxHp=t.hp; t.effects.averse=true; break;
+            case 'blessing': let v=prompt("Amt (Max "+u.hp+"):", u.hp); let amt=parseInt(v)||0; if(amt>u.hp)amt=u.hp; t.heal(amt); if(t.team===u.team) u.takeDamage(amt,'perfect',u, "Self Sacrifice"); break;
+            case 'heaven': window.gameState.heavenActive={source:u.uid, turn:u.team}; window.gameState.cards.forEach(c=>c.moves=0); log("HEAVEN ACTIVE: Speed set to 0."); break;
+            case 'absorb': u.effects.dmgAbsorb=2; break;
+            case 'strike': t.takeDamage(500,'normal',u, s.name); break;
+            case 'armor': u.def+=150; u.spd=Math.max(0,u.spd-1); u.dmg-=100; break;
+            case 'jab': t.takeDamage(50,'normal',u, s.name); t.effects.stun=1; break;
+            case 'last': u.effects.lastArrow=true; break;
+            case 'shield': u.manaShield=!u.manaShield; break;
+            case 'protect': t.effects.knightProtect=true; break;
+            case 'freeze': window.gameState.cards.filter(c=>c.team!==u.team).forEach(c=>c.effects.stun=1); break;
+            case 'vitagus': u.heal(250); window.gameState.cards.filter(c=>c.team===u.team).forEach(c=>c.heal(500)); break;
+            case 'mainto': window.gameState.cards.filter(c=>c.team===u.team && c!==u).forEach(c=>{u.mana+=c.mana;c.mana=0;}); break;
+            case 'potion': t.heal(250); t.mana+=400; break;
+            case 'teamup': window.gameState.cards.filter(c=>c.team===u.team).forEach(c=>{c.dmg*=2;c.effects.teamUp=true;}); break;
+            case 'shame': window.gameState.cards.filter(c=>c.team!==u.team).forEach(c=>c.effects.burn=2); break;
+            case 'divine': u.effects.divineLight=true; break;
+            case 'doremi': doFieldDmg(u,u.dmg*0.5,'field', "Do-re-mi"); break;
+            case 'song': u.moves=0; setTimeout(()=>{u.spd*=2;},100); break;
+            case 'charge': u.charges++; u.dmg+=100; break;
+            case 'pain': t.effects.painPower=true; break;
+            case 'ragardo': doFieldDmg(u,200,'perfect', "Ragardo"); break;
+            case 'pulvis': t.takeDamage(400,'pierce',u, s.name); break;
+            case 'bear': u.hp+=700; u.maxHp+=700; u.dmg+=150; u.effects.bearForm=true; break;
+            case 'fox': u.hp+=200; u.maxHp+=200; u.spd+=1; u.pierce=true; u.effects.foxSpirit=true; break;
+            case 'axo': u.effects.axolotl=true; u.maxHp=600; if(u.hp>600)u.hp=600; break;
+            case 'barrier': if(u.hp>250){u.hp-=250; summonUnit('Barrier',u.team,{name:'Barrier',hp:500,def:0,isSummon:true});} else log("No HP"); break;
+            case 'pray': u.effects.fateStacks=(u.effects.fateStacks||0)+1; if(u.effects.fateStacks>=3) u.effects.fateTurn=window.gameState.round+1; break;
+            case 'wrath': doFieldDmg(u,u.mana,'pierce', "Wrath of God"); u.mana=0; break;
+            case 'dragonsniper': t.takeDamage(1000,'perfect',u, "Dragon Sniper"); u.spd++; u.baseSpd++; break;
+            case 'omega': u.spd += 2; log("Omega God Speed! +2 Speed."); break;
+            case 'void': t.hp = Math.floor(t.hp/2); t.maxHp = Math.floor(t.maxHp/2); t.dmg = Math.floor(t.dmg/2); t.effects.voidCurse = true; log(`${t.name} Cursed by Void! Stats Halved.`); break;
+            case 'cosmic': 
+                const roll = Math.floor(Math.random() * 6) + 1;
+                log(`Cosmic Cannon Rolled: ${roll}`);
+                if (roll === 2 || roll === 6) {
+                    doFieldDmg(u, u.armor, 'perfect', "Cosmic Cannon");
+                    log(`BOOM! ${u.armor} Perfect Team Dmg!`);
+                } else {
+                    log("Cosmic Cannon Misfire...");
+                }
+                break;
+        }
+    }
+    log(`${u.name} used ${s.name}`);
+    renderBoard();
+}
+
+function doFieldDmg(u,d,t,src="Field") { window.gameState.cards.filter(c=>c.team!==u.team).forEach(c=>c.takeDamage(d,t,u,src)); }
+function attemptSummon(u,n,st,g) {
+    const limit = (n==='Test-1-Grapy')?2:1;
+    if(window.gameState.cards.filter(c=>c.team===u.team && c.name===n && !c.dead).length >= limit) { log(`Cannot summon ${n}. Limit reached.`); return; }
+    
+    const canAttack = (n==='The Death'||n.includes('Grapy')||n.includes('Groom'));
+    const isPerfect = (n==='The Death');
+    const unit = new BattleCard({
+        name:n, hp:st.hp, def:st.def||0, dmg:st.dmg||0, spd:st.spd||0,
+        isSummon:true, canAttack:canAttack, perfect:isPerfect, passives:st.passives, skills:st.skills
+    },u.team,n.toLowerCase()+Date.now());
+    if(st.armor) unit.armor=st.armor; if(st.pierce) unit.pierce=true;
+    if(g) { unit.guarding=g.uid; g.guardedBy=unit.uid; }
+    window.gameState.cards.push(unit);
+}
+function summonUnit(n,t,st) { const u=new BattleCard({...st,name:n,isSummon:true},t,n+Date.now()); if(st.armor)u.armor=st.armor; window.gameState.cards.push(u); }
+
+function pickTarget(cb) { window.gameState.targeting=cb; document.body.classList.add('targeting'); showToast("Select Target"); }
+window.handleCardClick = function(idx) { if(window.gameState.targeting) { document.body.classList.remove('targeting'); window.gameState.targeting(window.gameState.cards[idx]); window.gameState.targeting=null; } }
+function log(msg) { 
+    const b = document.getElementById('log-box'); 
+    const colored = colorizeText(msg);
+    b.innerHTML = `<div>> ${colored}</div>` + b.innerHTML; 
+    window.gameState.logHistory.unshift(msg); 
+    if(window.gameState.logHistory.length>15) window.gameState.logHistory.pop(); 
+}
+
+function renderBoard() {
+    const p1Div = document.getElementById('p1-side'); const p2Div = document.getElementById('p2-side');
+    p1Div.innerHTML=''; p2Div.innerHTML='';
+    const activeCards = window.gameState.cards.filter(c => !(c.dead && c.isSummon));
+
+    activeCards.forEach((c) => {
+        const i = window.gameState.cards.findIndex(card => card.uid === c.uid);
+        const el = document.createElement('div');
+        el.className = `b-card ${c.team} ${c.isSummon?'summon':''} ${c.dead?'dead':''} ${(c.team===window.gameState.turn&&c.moves>0)?'active-turn':''}`;
+        el.onclick = () => handleCardClick(i);
+        const hpPct = (c.hp/c.maxHp)*100;
+        
+        let activeEffectsHtml = '';
+        const addP = (text, type='neutral', active=false) => { activeEffectsHtml += `<span class="passive-tag ${type} ${active?'shine-active':''}">${text}</span>`; };
+        if(c.isSummon) addP("SUMMON");
+        if(c.effects.stun) addP("STUNNED", "bad", true);
+        if(c.effects.burn) addP("BURNED", "bad", true);
+        if(c.effects.dmgAbsorb) addP(`BLOCKING`, "good", true);
+        if(c.effects.absorbBuff) addP(`ABSORB BUFF`, "good", true);
+        if(c.effects.arkShield) addP("ARKSHIELD", "good", true);
+        if(c.effects.knightProtect) addP("PROTECTED", "good", true);
+        if(c.effects.painPower) addP("MARKED", "bad", true);
+        if(c.manaShield && c.name === 'Magician') addP("MANA SHIELD", "good", true);
+        if(c.effects.lastArrow) addP("LAST ARROW", "bad", true);
+        if(c.effects.teamUp) addP("TEAM UP", "good", true);
+        if(c.effects.divineLight) addP("DIVINE LIGHT", "good", true);
+        if(c.effects.foxSpirit) addP("FOX SPIRIT", "good", true);
+        if(c.effects.bearForm) addP("BEAR FORM", "good", true);
+        if(c.effects.axolotl) addP("AXOLOTL", "good", true);
+        if(c.effects.bardBuff) addP("BARD BUFF", "good");
+        if(c.effects.fateStacks) addP(`FATE ${c.effects.fateStacks}/3`, "bad");
+        if(c.guardedBy) addP("GUARDED", "good", true);
+        if(c.effects.vexed) addP(`VEXED (${c.effects.vexed.rounds})`, "bad", true);
+        if(c.effects.averse) addP("AVERSE", "bad", true);
+        if(c.effects.tornadoBlades) addP("TORNADO", "good", true);
+        if(c.effects.infernoActive) addP("INFERNO", "good", true);
+        if(c.effects.geraldPower) addP(`DEATH SCYTHE (${c.effects.geraldPower})`, "good", true);
+        if(c.effects.timeBomb) addP(`BOMB: ${c.effects.timeBomb}`, "bad", true);
+        if(c.effects.entangledWith) addP("ENTANGLED", "special", true);
+        if(c.hidden) addP("HIDDEN", "special", true);
+        if(c.effects.zephyrRage) addP("RAGE", "bad", true);
+        if(c.effects.nextPerfect) addP("PERFECT STRIKE", "good", true);
+        if(c.effects.cursedDeath) addP("DEATH CURSE", "bad", true);
+        if(c.effects.buildUpActive) addP("BUILD UP", "good", true);
+        if(c.effects.voidCurse) addP("VOID CURSE", "bad", true);
+
+        let inherentPassivesHtml = '';
+        if (c.template.passives && c.template.passives.length > 0) {
+            const infoBtn = `<span class="passive-info-icon" onclick="openInfoModal(event, '${c.template.id}')">?</span>`;
+            inherentPassivesHtml = `<div class="inherent-passives">Passive: ${c.template.passives.map(p => p.name).join(', ')}${infoBtn}</div>`;
+        }
+
+        let btns = '';
+        if((!window.isMultiplayer || window.gameState.turn===window.myRole) && c.team===window.gameState.turn && c.moves>0 && !c.dead && (!c.isSummon||c.canAttack)) {
+            btns = `<div class="skill-btn-wrapper"><button class="card-action-btn btn-atk" onmouseenter="showTooltip(event, 'Deals ${c.dmg} ${c.pierce?'Pierce':''} Damage.')" onmouseleave="hideTooltip()" onclick="event.stopPropagation(); cardAction(${i},'attack')">Attack</button></div>`;
+            if(c.template.skills) c.template.skills.forEach((s,si) => {
+                let shineClass = (s.id==='shield'&&c.manaShield)?'shine-active':'';
+                let txt = s.name;
+                if(s.id==='omega') txt += ` (${c.omegaUses})`;
+                btns += `<div class="skill-btn-wrapper"><button class="card-action-btn btn-act ${shineClass}" onmouseenter="showTooltip(event, '${s.desc.replace(/'/g, "\\'")}')" onmouseleave="hideTooltip()" onclick="event.stopPropagation(); cardAction(${i},'skill',${si})">${txt}</button></div>`;
+            });
+        }
+
+        let resourceBar = '';
+        if (c.particles !== undefined) resourceBar = `<div class="bar-wrap"><div class="bar-fill particle-bar" style="width:${(c.particles/10)*100}%"></div><div class="bar-text">${c.particles} Particles</div></div>`;
+        else if (c.bullets !== undefined) resourceBar = `<div class="bar-wrap"><div class="bar-fill bullet-bar" style="width:${Math.min((c.bullets/5)*100,100)}%"></div><div class="bar-text">${c.bullets} Bullets</div></div>`;
+        else resourceBar = `<div class="bar-wrap"><div class="bar-fill mana-bar" style="width:${(c.mana/2000)*100}%"></div><div class="bar-text">${c.mana} MP</div></div>`;
+
+        el.innerHTML = `
+            <div><strong style="color: var(--${c.team}-color)">${c.name}</strong> <small>Spd:${c.spd}</small></div>
+            ${inherentPassivesHtml}
+            <div class="effects-box">${activeEffectsHtml || 'No active status'}</div>
+            ${c.armor > 0 ? `<div class="bar-wrap"><div class="bar-fill armor-bar" style="width:${Math.min((c.armor/500)*100,100)}%"></div><div class="bar-text">${c.armor} Armor</div></div>` : ''}
+            <div class="bar-wrap"><div class="bar-fill hp-fill hp-bar" style="width:${hpPct}%"></div><div class="bar-text">${c.hp}/${c.maxHp} HP</div></div>
+            ${resourceBar}
+            <div class="stat-row"><span>Def: ${c.def}</span><span>AP: ${c.moves}</span></div>
+            <div class="skills-container">${btns}</div>
+        `;
+        if(c.team==='p1') p1Div.appendChild(el); else p2Div.appendChild(el);
+    });
+    
+    const canControlTurn = !window.isMultiplayer || window.gameState.turn === window.myRole;
+    if (canControlTurn) {
+        const btn = document.createElement('button');
+        btn.innerText = "End Turn / Skip";
+        btn.className = 'card-action-btn btn-pass';
+        btn.style.marginTop = '10px';
+        btn.onclick = endTurn;
+        if (window.gameState.turn === 'p1') p1Div.appendChild(btn); else p2Div.appendChild(btn);
+    }
+}
+
+function checkWinCondition() {
+    if(window.gameState.phase !== 'battle') return;
+    const p1A = window.gameState.cards.some(c => c.team === 'p1' && !c.dead && !c.isSummon);
+    const p2A = window.gameState.cards.some(c => c.team === 'p2' && !c.dead && !c.isSummon);
+    if(!p1A || !p2A) {
+        let w = !p1A && p2A ? 'p2' : (p1A && !p2A ? 'p1' : 'draw');
+        window.gameState.winner = w; window.gameState.phase = 'gameover';
+        showGameOver(w); updateRemoteState();
+    }
+}
+
+function showGameOver(w) {
+    clearInterval(window.turnTimerInterval);
+    document.getElementById('game-over-screen').style.display = 'flex';
+    const text = document.getElementById('winner-text');
+    const p1n = window.gameState.playerNames.p1;
+    const p2n = window.gameState.playerNames.p2;
+
+    if (w === 'draw') { text.innerText = "DRAW!"; text.style.color = '#fff'; } 
+    else if (window.isMultiplayer) {
+        if (w === window.myRole) { 
+            text.innerText = "VICTORY!"; text.style.color = '#4ade80'; SoundManager.play('win'); 
+            updateDoc(doc(db,"users",window.currentUserProfile.uid), {coins: increment(50)});
+            document.getElementById('coin-reward-display').innerText = "+50 Coins";
+        } 
+        else { text.innerText = "DEFEAT"; text.style.color = '#ef4444'; SoundManager.play('lose'); }
+    } else {
+        text.innerText = w === 'p1' ? `${p1n} WINS!` : `${p2n} WINS!`;
+        text.style.color = w === 'p1' ? '#3b82f6' : '#ef4444';
+        SoundManager.play('win');
+    }
+}
+window.triggerRematch = function() {
+    SoundManager.play('click');
+    window.gameState = { phase: 'select', p1Team: [], p2Team: [], turn: 'p1', round: 1, cards: [], logHistory: [], teamSize: window.gameState.teamSize, playerNames: window.gameState.playerNames };
+    document.getElementById('game-over-screen').style.display = 'none';
+    goToScreen('select-screen'); initSelection();
+    if(window.isMultiplayer) updateRemoteState();
+}
+
+// Utility Functions
+window.getSafeGameState = () => JSON.stringify({...window.gameState, targeting:null});
+window.updateRemoteState = () => dbRoomRef ? setDoc(dbRoomRef, { gameState: getSafeGameState(), lastUpdate: Date.now() }, { merge: true }) : null;
+window.applyRemoteState = (rs) => {
+    if(rs.phase === 'gameover' && window.gameState.phase !== 'gameover') showGameOver(rs.winner);
+    
+    if(rs.phase === 'select') {
+        window.gameState = rs;
+        if (!document.getElementById('select-screen').classList.contains('active-screen')) {
+             document.getElementById('game-over-screen').style.display = 'none'; 
+             goToScreen('select-screen'); 
+             initSelection(); 
+        } else {
+             renderSelectionUpdates();
+        }
+    }
+
+    if(rs.phase === 'battle') {
+        const prevTurn = window.gameState.turn;
+        if(rs.cards) rs.cards = rs.cards.map(c => Object.assign(new BattleCard(c.template, c.team, c.uid), c));
+        window.gameState = rs;
+        if(!document.getElementById('battle-screen').classList.contains('active-screen')) { goToScreen('battle-screen'); startBattle(true); }
+        if(prevTurn !== rs.turn) startTurnTimer();
+        renderBoard();
+        const t = window.gameState.turn === 'p1' ? window.gameState.playerNames.p1 : window.gameState.playerNames.p2;
+        document.getElementById('turn-indicator').innerText = `Round ${window.gameState.round} - ${t}`;
+        const logBox = document.getElementById('log-box');
+        logBox.innerHTML = window.gameState.logHistory.map(m=>`<div>> ${colorizeText(m)}</div>`).join('');
+    }
+}
+window.goToScreen = (id) => { document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active-screen')); document.getElementById(id).classList.add('active-screen'); }
+window.copyRoomCode = () => { navigator.clipboard.writeText(window.roomId).then(()=>alert("Copied")); }
+</script>
+</body>
+</html>
