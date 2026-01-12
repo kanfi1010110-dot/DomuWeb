@@ -226,6 +226,15 @@
         }
         #cancel-search-btn:hover { background: #ef4444; color: white; }
 
+        .offline-options {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 5px;
+            color: #ccc;
+        }
+
         /* --- COLLECTION SCREEN --- */
         #collection-screen { padding: 20px; align-items: center; overflow-y: auto; }
         .col-grid {
@@ -799,7 +808,6 @@
     <div id="winner-text" style="color: #fff;">VICTORY</div>
     <div style="color: var(--accent); font-size: 1.5rem; margin-bottom: 20px;" id="coin-reward-display"></div>
     <button class="rematch-btn" onclick="triggerRematch()">REMATCH</button>
-    <button class="rematch-btn" style="background:#4b5563; margin-top:10px; font-size:1rem;" onclick="cancelMatchmaking()">Return to Lobby</button>
 </div>
 
 <!-- AUTH SCREEN -->
@@ -869,6 +877,11 @@
             <option value="3">War (3v3 Cards)</option>
         </select>
         
+        <div class="offline-options">
+            <input type="checkbox" id="ai-toggle">
+            <label for="ai-toggle">Play vs AI</label>
+        </div>
+
         <button class="lobby-btn secondary" id="btn-offline" onclick="startOffline()" data-original-text="Play Offline (Hotseat)">Offline Practice</button>
         <button class="lobby-btn" id="btn-host" onclick="startHost()" data-original-text="Create Online Room">Create Room</button>
         
@@ -899,10 +912,7 @@
 <div id="select-screen" class="screen">
     <div style="display:flex; justify-content:space-between; width:90%; max-width:1000px; margin-bottom:10px;">
         <h1>Select Your Team</h1>
-        <div style="display:flex; align-items:center; gap:10px;">
-            <button class="logout-btn" style="background:#7f1d1d; border:none;" onclick="cancelMatchmaking()">Leave Lobby</button>
-            <div id="select-timer" style="color:var(--accent); font-weight:bold; font-size:1.5rem;"></div>
-        </div>
+        <div id="select-timer" style="color:var(--accent); font-weight:bold; font-size:1.5rem;"></div>
     </div>
     <h2 id="select-instruction" style="color: var(--p1-color)">Player 1: Select Cards</h2>
     <div id="char-grid"></div>
@@ -914,7 +924,7 @@
         <span id="turn-indicator">Round 1</span>
         <div id="timer-display">120</div>
         <div style="flex: 1;"></div>
-        <button style="width: auto; background:#7f1d1d; color:#fca5a5; border:1px solid #991b1b; cursor:pointer;" onclick="cancelMatchmaking()">Exit to Lobby</button>
+        <button style="width: auto;" onclick="window.location.reload()">Exit</button>
     </div>
     <div id="log-box"></div>
     <div id="board">
@@ -1301,17 +1311,15 @@ window.startMatchmaking = async function() {
 
     try {
         const roomsRef = collection(db, "rooms");
-        // Get recent public rooms. 
         const q = query(roomsRef, where("isPublic", "==", true), limit(20)); 
         const snapshot = await getDocs(q);
         
         let targetRoomId = null;
         const now = Date.now();
-        const cutoff = 2 * 60 * 1000; // 2 minutes staleness cutoff
+        const cutoff = 2 * 60 * 1000;
 
         snapshot.forEach(doc => {
             const data = doc.data();
-            // Criteria: No Joiner, Not My Room, AND Recently Updated (Active Host)
             if (!data.joinerId && data.hostId !== auth.currentUser.uid) {
                 if (data.lastUpdate && (now - data.lastUpdate) < cutoff) {
                     targetRoomId = doc.id;
@@ -1325,12 +1333,9 @@ window.startMatchmaking = async function() {
             window.isMultiplayer = true;
             window.myRole = 'p2';
             window.gameState.playerNames.p2 = window.currentUserProfile.username;
-            window.gameState.p1Team = []; // Clear
-            window.gameState.p2Team = []; // Clear
             document.getElementById('lobby-status').innerText = "Found room! Joining...";
             subscribeToRoom();
         } else {
-            // No valid room found, create one
             await startHost(true);
         }
     } catch(e) {
@@ -1352,11 +1357,7 @@ window.cancelMatchmaking = function() {
     dbRoomRef = null;
     unsubscribeRoom = null;
     window.battleStarting = false;
-    window.battleStartedLocal = false;
-    
-    // Reset Screens
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
-    document.getElementById('lobby-screen').classList.add('active-screen');
+    window.battleStartedLocal = false; // Fix: Reset battle start flag
     
     document.getElementById('lobby-status').innerText = "";
     document.getElementById('room-code-display').style.display = 'none';
@@ -1364,20 +1365,22 @@ window.cancelMatchmaking = function() {
     document.getElementById('btn-matchmake').innerText = "Find Quick Match";
     document.getElementById('btn-matchmake').disabled = false;
     
-    // Reset Game State basics
     window.gameState.p1Team = [];
     window.gameState.p2Team = [];
-    window.gameState.phase = 'waiting';
 }
 
 window.startOffline = function() {
     window.isMultiplayer = false;
     window.myRole = null;
-    window.gameState.playerNames = { p1: "Player 1", p2: "Player 2" };
-    // Clear any previous teams
+    window.gameState.playerNames = { p1: "Player 1", p2: "AI Opponent" };
+    window.isAI = document.getElementById('ai-toggle').checked;
+    if (!window.isAI) window.gameState.playerNames.p2 = "Player 2";
+
     window.gameState.p1Team = [];
     window.gameState.p2Team = [];
-    window.gameState.phase = 'select'; // FORCE PHASE FOR OFFLINE
+    window.battleStarting = false; // Reset
+    window.battleStartedLocal = false; // Reset
+
     const mode = parseInt(document.getElementById('mode-select').value);
     window.gameState.teamSize = mode;
     goToScreen('select-screen');
@@ -1389,10 +1392,12 @@ window.startHost = async function(isPublic = false) {
     window.isMultiplayer = true;
     window.myRole = 'p1';
     window.gameState.playerNames.p1 = window.currentUserProfile.username;
-    // Clear teams for new game
+    
+    // Clear and Reset State for New Game
     window.gameState.p1Team = [];
     window.gameState.p2Team = [];
-    window.gameState.phase = 'waiting'; // Set initial state to WAITING
+    window.battleStarting = false;
+    window.battleStartedLocal = false;
     
     const mode = parseInt(document.getElementById('mode-select').value);
     window.gameState.teamSize = mode;
@@ -1424,15 +1429,14 @@ window.startHost = async function(isPublic = false) {
             document.getElementById('lobby-status').innerText = "Matchmaking: Waiting for opponent...";
         }
         
-        // Start Heartbeat to keep room "fresh"
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         heartbeatInterval = setInterval(async () => {
-            if (dbRoomRef && window.gameState.phase === 'waiting' && !window.battleStarting) {
+            if (dbRoomRef && window.gameState.phase === 'select' && !window.battleStarting) {
                  try { await updateDoc(dbRoomRef, { lastUpdate: Date.now() }); } catch(e) {}
             } else {
                  clearInterval(heartbeatInterval);
             }
-        }, 15000); // Every 15s
+        }, 15000);
 
         subscribeToRoom();
     } catch (e) { console.error(e); alert("Error: " + e.message); }
@@ -1445,8 +1449,11 @@ window.startJoin = async function() {
     window.isMultiplayer = true;
     window.myRole = 'p2';
     window.gameState.playerNames.p2 = window.currentUserProfile.username;
-    window.gameState.p1Team = []; // Clear
-    window.gameState.p2Team = []; // Clear
+    window.gameState.p1Team = []; 
+    window.gameState.p2Team = []; 
+    window.battleStarting = false;
+    window.battleStartedLocal = false;
+
     window.roomId = code;
     dbRoomRef = doc(db, 'rooms', window.roomId);
     document.getElementById('cancel-search-btn').style.display = 'inline-block';
@@ -1468,17 +1475,16 @@ function subscribeToRoom() {
 
         if (data.teamSize) window.gameState.teamSize = data.teamSize;
 
-        // HOST DETECTS JOINER -> TRANSITION TO SELECT
-        if (window.myRole === 'p1' && data.joinerName && window.gameState.phase === 'waiting') {
+        if (window.myRole === 'p1' && data.joinerName && window.gameState.playerNames.p2 === "Player 2") {
              window.gameState.playerNames.p2 = data.joinerName;
-             window.gameState.phase = 'select'; // Host moves game to select phase
-             updateRemoteState(); // Sync this change
-             if(document.getElementById('lobby-screen').style.display !== 'none') { 
-                 goToScreen('select-screen'); 
-                 initSelection(); 
-             }
+             updateRemoteState();
+             if(document.getElementById('lobby-screen').style.display !== 'none') { goToScreen('select-screen'); initSelection(); }
         }
         
+        if (window.myRole === 'p2' && data.joinerId) {
+             if(document.getElementById('lobby-screen').style.display !== 'none') { goToScreen('select-screen'); initSelection(); }
+        }
+
         if (data.gameState) { const remoteState = JSON.parse(data.gameState); applyRemoteState(remoteState); }
         if (data.chat && Array.isArray(data.chat)) { renderChat(data.chat); }
 
@@ -1779,16 +1785,14 @@ function selectChar(char, el) {
         const isTaken = window.gameState.p1Team.some(c => c.id === char.id) || window.gameState.p2Team.some(c => c.id === char.id);
         if (isTaken) return;
         
-        // P1 Selection Logic
         if (window.myRole === 'p1' && window.gameState.p1Team.length < limit) { 
             window.gameState.p1Team.push(char); 
-            renderSelectionUpdates(); // Immediate Local Update
+            renderSelectionUpdates(); 
             updateRemoteState(); 
         }
-        // P2 Selection Logic
         else if (window.myRole === 'p2' && window.gameState.p2Team.length < limit) { 
             window.gameState.p2Team.push(char); 
-            renderSelectionUpdates(); // Immediate Local Update
+            renderSelectionUpdates(); 
             updateRemoteState(); 
         }
     } else {
@@ -1797,7 +1801,20 @@ function selectChar(char, el) {
         if (!p1Full) { if (!window.gameState.p1Team.some(c => c.id === char.id)) window.gameState.p1Team.push(char); } 
         else if (!p2Full) { if (!window.gameState.p2Team.some(c => c.id === char.id)) window.gameState.p2Team.push(char); }
         renderSelectionUpdates();
-        if (window.gameState.p1Team.length === limit && window.gameState.p2Team.length === limit) setTimeout(startBattle, 500);
+        
+        // AI Logic: Auto-fill P2 if AI mode is on and P1 is done
+        if (window.isAI && window.gameState.p1Team.length === limit && window.gameState.p2Team.length === 0) {
+            // Fill P2 team randomly
+            while(window.gameState.p2Team.length < limit) {
+                const randomChar = CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)];
+                if(!window.gameState.p1Team.some(c=>c.id===randomChar.id) && !window.gameState.p2Team.some(c=>c.id===randomChar.id)) {
+                    window.gameState.p2Team.push(randomChar);
+                }
+            }
+            setTimeout(startBattle, 500);
+        } else if (!window.isAI && window.gameState.p1Team.length === limit && window.gameState.p2Team.length === limit) {
+            setTimeout(startBattle, 500);
+        }
     }
 }
 
@@ -1938,7 +1955,80 @@ function startTurn() {
         } else c.moves=0;
     });
     window.gameState.turnActivity = false; renderBoard();
+
+    // AI TURN LOGIC
+    if (window.isAI && !window.isMultiplayer && window.gameState.turn === 'p2') {
+        setTimeout(runAITurn, 1000);
+    }
 }
+
+function runAITurn() {
+    if (window.gameState.phase !== 'battle') return;
+    const aiCards = window.gameState.cards.filter(c => c.team === 'p2' && !c.dead && !c.stunned && c.moves > 0);
+    
+    if (aiCards.length === 0) {
+        endTurn();
+        return;
+    }
+
+    // Pick random card to act
+    const card = aiCards[Math.floor(Math.random() * aiCards.length)];
+    const cardIdx = window.gameState.cards.findIndex(c => c.uid === card.uid);
+    const enemies = window.gameState.cards.filter(c => c.team === 'p1' && !c.dead);
+    const target = enemies.length > 0 ? enemies[Math.floor(Math.random() * enemies.length)] : null;
+
+    if (!target) { endTurn(); return; }
+
+    // Decide Action: 30% Skill (if available/affordable), 70% Attack
+    let actionType = 'attack';
+    let payload = null;
+
+    if (Math.random() < 0.3 && card.template.skills && card.template.skills.length > 0) {
+        const skillIdx = Math.floor(Math.random() * card.template.skills.length);
+        const skill = card.template.skills[skillIdx];
+        // Basic check for resources (simplified AI)
+        if ((!skill.cost || card.mana >= skill.cost) && skill.id !== 'kamikaze') { // Avoid suicide unless smart
+             actionType = 'skill';
+             payload = skillIdx;
+        }
+    }
+
+    // Set target for cardAction to use
+    window.gameState.targeting = (t) => { /* Intercepted by cardAction internally */ };
+    
+    // Simulate selection
+    window.gameState.targeting = null; // Clear manual target
+    
+    // Execute logic manually to bypass click requirement
+    // We need to temporarily mock targeting callback for the AI
+    const originalPickTarget = window.pickTarget;
+    
+    // Override pickTarget to instantly return the AI's choice
+    window.gameState.aiTarget = target;
+    
+    // Execute
+    cardAction(cardIdx, actionType, payload);
+    
+    // If card still has moves, try again, else end turn
+    setTimeout(() => {
+        if (card.moves > 0) runAITurn();
+        else endTurn();
+    }, 1000);
+}
+
+// Modify pickTarget to handle AI
+const originalPickTarget = window.pickTarget; // Store if needed, but we redefine
+function pickTarget(cb) {
+    if (window.isAI && window.gameState.turn === 'p2' && window.gameState.aiTarget) {
+        cb(window.gameState.aiTarget);
+        window.gameState.aiTarget = null;
+        return;
+    }
+    window.gameState.targeting=cb; 
+    document.body.classList.add('targeting'); 
+    showToast("Select Target"); 
+}
+
 
 function endTurn() {
     if(window.isMultiplayer && window.gameState.turn !== window.myRole) return alert("Not your turn");
@@ -2167,7 +2257,6 @@ function attemptSummon(u,n,st,g) {
 }
 function summonUnit(n,t,st) { const u=new BattleCard({...st,name:n,isSummon:true},t,n+Date.now()); if(st.armor)u.armor=st.armor; window.gameState.cards.push(u); }
 
-function pickTarget(cb) { window.gameState.targeting=cb; document.body.classList.add('targeting'); showToast("Select Target"); }
 window.handleCardClick = function(idx) { if(window.gameState.targeting) { document.body.classList.remove('targeting'); window.gameState.targeting(window.gameState.cards[idx]); window.gameState.targeting=null; } }
 function log(msg) { 
     const b = document.getElementById('log-box'); 
@@ -2231,13 +2320,18 @@ function renderBoard() {
 
         let btns = '';
         if((!window.isMultiplayer || window.gameState.turn===window.myRole) && c.team===window.gameState.turn && c.moves>0 && !c.dead && (!c.isSummon||c.canAttack)) {
-            btns = `<div class="skill-btn-wrapper"><button class="card-action-btn btn-atk" onmouseenter="showTooltip(event, 'Deals ${c.dmg} ${c.pierce?'Pierce':''} Damage.')" onmouseleave="hideTooltip()" onclick="event.stopPropagation(); cardAction(${i},'attack')">Attack</button></div>`;
-            if(c.template.skills) c.template.skills.forEach((s,si) => {
-                let shineClass = (s.id==='shield'&&c.manaShield)?'shine-active':'';
-                let txt = s.name;
-                if(s.id==='omega') txt += ` (${c.omegaUses})`;
-                btns += `<div class="skill-btn-wrapper"><button class="card-action-btn btn-act ${shineClass}" onmouseenter="showTooltip(event, '${s.desc.replace(/'/g, "\\'")}')" onmouseleave="hideTooltip()" onclick="event.stopPropagation(); cardAction(${i},'skill',${si})">${txt}</button></div>`;
-            });
+            // Disable buttons if it's AI turn in local play
+            if (!window.isMultiplayer && window.isAI && window.gameState.turn === 'p2') {
+                // Do not show buttons for AI
+            } else {
+                btns = `<div class="skill-btn-wrapper"><button class="card-action-btn btn-atk" onmouseenter="showTooltip(event, 'Deals ${c.dmg} ${c.pierce?'Pierce':''} Damage.')" onmouseleave="hideTooltip()" onclick="event.stopPropagation(); cardAction(${i},'attack')">Attack</button></div>`;
+                if(c.template.skills) c.template.skills.forEach((s,si) => {
+                    let shineClass = (s.id==='shield'&&c.manaShield)?'shine-active':'';
+                    let txt = s.name;
+                    if(s.id==='omega') txt += ` (${c.omegaUses})`;
+                    btns += `<div class="skill-btn-wrapper"><button class="card-action-btn btn-act ${shineClass}" onmouseenter="showTooltip(event, '${s.desc.replace(/'/g, "\\'")}')" onmouseleave="hideTooltip()" onclick="event.stopPropagation(); cardAction(${i},'skill',${si})">${txt}</button></div>`;
+                });
+            }
         }
 
         let resourceBar = '';
@@ -2260,12 +2354,16 @@ function renderBoard() {
     
     const canControlTurn = !window.isMultiplayer || window.gameState.turn === window.myRole;
     if (canControlTurn) {
-        const btn = document.createElement('button');
-        btn.innerText = "End Turn / Skip";
-        btn.className = 'card-action-btn btn-pass';
-        btn.style.marginTop = '10px';
-        btn.onclick = endTurn;
-        if (window.gameState.turn === 'p1') p1Div.appendChild(btn); else p2Div.appendChild(btn);
+        if (!window.isMultiplayer && window.isAI && window.gameState.turn === 'p2') {
+             // Hide End Turn button for AI
+        } else {
+            const btn = document.createElement('button');
+            btn.innerText = "End Turn / Skip";
+            btn.className = 'card-action-btn btn-pass';
+            btn.style.marginTop = '10px';
+            btn.onclick = endTurn;
+            if (window.gameState.turn === 'p1') p1Div.appendChild(btn); else p2Div.appendChild(btn);
+        }
     }
 }
 
@@ -2303,6 +2401,10 @@ function showGameOver(w) {
 }
 window.triggerRematch = function() {
     SoundManager.play('click');
+    // FIX: Reset battle flags so new game can start
+    window.battleStarting = false;
+    window.battleStartedLocal = false;
+    
     window.gameState = { phase: 'select', p1Team: [], p2Team: [], turn: 'p1', round: 1, cards: [], logHistory: [], teamSize: window.gameState.teamSize, playerNames: window.gameState.playerNames };
     document.getElementById('game-over-screen').style.display = 'none';
     goToScreen('select-screen'); initSelection();
